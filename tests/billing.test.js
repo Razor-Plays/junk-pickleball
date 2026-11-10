@@ -64,7 +64,9 @@ test('players pay for their guests', () => {
   const st = PB.monthStatement(data, '2026-10');
   const cat = st.players.find((p) => p.name === 'Cat');
   assert.equal(cat.total, 233.33); // 70 + guest Zoe 70 + 93.33
-  assert.equal(cat.guestCount, 1);
+  assert.deepEqual([cat.own, cat.games], [163.33, 2]);
+  assert.deepEqual(cat.guests, [{ name: 'Zoe', amount: 70, count: 1 }]);
+  assert.equal(cat.isGuest, false);
   assert.ok(cat.paid, 'payment row is picked up');
   assert.equal(st.players.find((p) => p.name === 'Dan').total, 70);
 });
@@ -169,4 +171,91 @@ test('returning guests are remembered with who paid for them last', () => {
     { session_id: 's3', name: 'Guest 4', guest: 'TRUE', pays: 'Unassigned' },
     { session_id: 's3', name: "Cat's friend", guest: 'TRUE', pays: 'Cat' }] });
   assert.deepEqual(PB.knownGuests(d).map((g) => [g.name, g.pays, g.count]), [['Zoe', 'Dan', 2]]);
+});
+
+// A month with every kind of payer: regulars, a hosted guest, a visitor
+// paying their own way, a member who brought a guest, and Reclub.
+const mixed = PB.normalize({
+  settings: { default_rate: 140, reclub_fee: 100 },
+  players: raw.players,
+  sessions: [{ id: 'x1', date: '2026-12-03', reclub_fee: 100 }, { id: 'x2', date: '2026-12-10', reclub_fee: 100 }],
+  bookings: [{ session_id: 'x1', member: 'Ann', hours: 2, rate: 140 }, { session_id: 'x2', member: 'Ben', hours: 2, rate: 140 }],
+  attendance: [
+    // x1: 7 heads, 40 each
+    { session_id: 'x1', name: 'Ann', guest: 'FALSE', pays: 'Ann' },
+    { session_id: 'x1', name: 'Cat', guest: 'FALSE', pays: 'Cat' },
+    { session_id: 'x1', name: 'Dan', guest: 'FALSE', pays: 'Dan' },
+    { session_id: 'x1', name: 'Jeremy', guest: 'TRUE', pays: 'Cat' },
+    { session_id: 'x1', name: 'Johann', guest: 'TRUE', pays: 'Johann' },
+    { session_id: 'x1', name: 'Milo', guest: 'TRUE', pays: 'Ann' },
+    { session_id: 'x1', name: 'Reclub guest', guest: 'TRUE', pays: 'Reclub' },
+    // x2: 4 heads, 70 each
+    { session_id: 'x2', name: 'Cat', guest: 'FALSE', pays: 'Cat' },
+    { session_id: 'x2', name: 'Jeremy', guest: 'TRUE', pays: 'Cat' },
+    { session_id: 'x2', name: 'Johann', guest: 'TRUE', pays: 'Johann' },
+    { session_id: 'x2', name: 'Ben', guest: 'FALSE', pays: 'Ben' },
+  ],
+});
+
+test('a visitor paying their own way is a guest, not someone with a guest', () => {
+  const st = PB.monthStatement(mixed, '2026-12');
+  const johann = st.players.find((p) => p.name === 'Johann');
+  assert.deepEqual([johann.isGuest, johann.own, johann.games, johann.guests.length], [true, 110, 2, 0]);
+  const cat = st.players.find((p) => p.name === 'Cat');
+  assert.deepEqual([cat.isGuest, cat.own, cat.total], [false, 110, 220]);
+  assert.deepEqual(cat.guests, [{ name: 'Jeremy', amount: 110, count: 2 }]);
+});
+
+test('group message: everyone on their own line, guests with their host, members shown separately', () => {
+  const msg = PB.groupMessage(PB.monthStatement(mixed, '2026-12'), mixed.settings);
+  assert.equal(msg, [
+    '*Junk Pickleball — December 2026 court fees*',
+    '',
+    '*Regulars*',
+    '• Cat: $110.00',
+    '• Dan: $40.00',
+    '',
+    '*Guests*',
+    "• Jeremy: $110.00 (Cat's guest)",
+    '• Johann: $110.00',
+    "• Milo: $40.00 (Ann's guest)",
+    '',
+    '*Members* (taken off their payback)',
+    '• Ann: $40.00',
+    '• Ben: $70.00',
+    '',
+    'Please pay Tommy — hosts settle up for their guests. Thanks! 🥒🎾',
+  ].join('\n'));
+  // every court dollar that isn't Reclub's appears exactly once
+  const listed = [...msg.matchAll(/\$([\d.]+)/g)].reduce((sum, m) => sum + Number(m[1]), 0);
+  const st = PB.monthStatement(mixed, '2026-12');
+  assert.equal(PB.round2(listed), PB.round2(st.totals.allocated - st.reclub.courtShare));
+});
+
+test("a host's bill says what each guest's share is", () => {
+  const st = PB.monthStatement(mixed, '2026-12');
+  const msg = PB.playerMessage(st.players.find((p) => p.name === 'Cat'), '2026-12', mixed.settings);
+  assert.match(msg, /Your own games: \$110\.00\nJeremy \(2 games\): \$110\.00\nTotal: \$220\.00/);
+  const own = PB.playerMessage(st.players.find((p) => p.name === 'Dan'), '2026-12', mixed.settings);
+  assert.equal(/Your own games/.test(own), false);
+  assert.match(PB.memberMessage(st.members.find((m) => m.name === 'Ann'), '2026-12', mixed.settings), /Of which Milo: \$40\.00/);
+});
+
+test('regular suggestions: named guests after their third visit, until they are made a player', () => {
+  const visits = (name, pays, ids) => ids.map((id) => ({ session_id: id, name, guest: 'TRUE', pays }));
+  const d = (players) => PB.normalize({ ...raw, players, attendance: [...raw.attendance,
+    ...visits('Clyde', 'Clyde', ['s1', 's2', 's3']), ...visits('Kay', 'Kay', ['s1', 's2']),
+    ...visits('Reclub guest', 'Reclub', ['s1', 's2', 's3'])] });
+  assert.deepEqual(PB.regularSuggestions(d(raw.players)).map((g) => [g.name, g.count]), [['Clyde', 3]]);
+  const promoted = d([...raw.players, { name: 'Clyde', role: 'player', active: 'TRUE' }]);
+  assert.deepEqual(PB.regularSuggestions(promoted), []);
+  // ... and their earlier visits now sit with the regulars
+  const clyde = PB.monthStatement(promoted, '2026-10').players.find((p) => p.name === 'Clyde');
+  assert.deepEqual([clyde.isGuest, clyde.games], [false, 2]);
+});
+
+test('names clash ignoring case and spacing', () => {
+  assert.equal(PB.playerNamed(data, ' ann ').name, 'Ann');
+  assert.equal(PB.playerNamed(data, 'Ann G'), null);
+  assert.equal(PB.playerNamed(data, 'ANN', 'Ann'), null); // renaming yourself is fine
 });

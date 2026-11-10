@@ -50,6 +50,15 @@
 
   PB.monthOf = (date) => clean(date).slice(0, 7);
 
+  /** Names are compared ignoring case and extra spaces: "neil " is "Neil". */
+  PB.nameKey = (name) => clean(name).toLowerCase().replace(/\s+/g, ' ');
+
+  /** The existing player whose name clashes with `name`, if any. */
+  PB.playerNamed = (data, name, except = '') => {
+    const key = PB.nameKey(name);
+    return data.players.find((p) => PB.nameKey(p.name) === key && p.name !== except) || null;
+  };
+
   PB.monthLabel = (month) => {
     const [y, m] = month.split('-').map(Number);
     const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -191,6 +200,7 @@
     const idx = PB.index(data);
     const sessions = PB.sessionsInMonth(data, month).map((s) => PB.sessionSummary(data, s, idx));
     const memberNames = new Set(data.players.filter((p) => p.role === 'member').map((p) => p.name));
+    const playerNames = new Set(data.players.map((p) => p.name));
 
     const people = new Map(); // payer -> { name, items: [], total }
     const getPerson = (name) => {
@@ -227,7 +237,10 @@
         }
         const p = getPerson(payer);
         p.charges = round2(p.charges + s.cpp);
-        p.items.push({ session: s.id, date: s.date, kind: a.guest ? 'guest' : 'self', who: a.name, amount: s.cpp });
+        // 'guest' = someone this person brought. A visitor paying their own
+        // way is simply playing for themselves.
+        const hosted = a.guest && a.name !== payer;
+        p.items.push({ session: s.id, date: s.date, kind: hosted ? 'guest' : 'self', who: a.name, amount: s.cpp });
       }
     }
 
@@ -236,6 +249,22 @@
     const players = [];
     const members = [];
     let reclub = null;
+
+    // Split what someone is charged into their own games and each guest's share.
+    const split = (items) => {
+      let own = 0;
+      let games = 0;
+      const guests = new Map();
+      for (const i of items) {
+        if (i.kind === 'self') { own += i.amount; games += 1; }
+        if (i.kind !== 'guest') continue;
+        const g = guests.get(i.who) || { name: i.who, amount: 0, count: 0 };
+        g.amount = round2(g.amount + i.amount);
+        g.count += 1;
+        guests.set(i.who, g);
+      }
+      return { own: round2(own), games, guests: [...guests.values()].sort((a, b) => a.name.localeCompare(b.name)) };
+    };
 
     for (const p of people.values()) {
       const paid = paidMap.get(p.name) || null;
@@ -248,11 +277,12 @@
       } else if (memberNames.has(p.name)) {
         members.push({
           name: p.name, credits: p.credits, charges: p.charges,
-          payback: round2(p.credits - p.charges), items: p.items, paid,
+          payback: round2(p.credits - p.charges), items: p.items, paid, ...split(p.items),
         });
       } else {
-        players.push({ name: p.name, total: p.charges, items: p.items, paid,
-          guestCount: p.items.filter((i) => i.kind === 'guest').length });
+        // isGuest: not on the Players list, i.e. a visitor paying their own way.
+        players.push({ name: p.name, total: p.charges, items: p.items, paid, ...split(p.items),
+          isGuest: !playerNames.has(p.name) });
       }
     }
 
@@ -356,9 +386,11 @@
   PB.knownGuests = (data) => {
     const dates = new Map(data.sessions.map((s) => [s.id, s.date]));
     const seen = new Map();
+    const playerKeys = new Set(data.players.map((p) => PB.nameKey(p.name)));
     for (const a of data.attendance) {
       if (!a.guest || a.pays === RECLUB || a.pays === 'Unassigned') continue;
       if (/^guest\s*\d+$/i.test(a.name) || /friend$/i.test(a.name)) continue;
+      if (playerKeys.has(PB.nameKey(a.name))) continue;
       const date = dates.get(a.session_id) || '';
       const cur = seen.get(a.name);
       if (!cur || date >= cur.date) seen.set(a.name, { name: a.name, pays: a.pays, date, count: (cur ? cur.count : 0) + 1 });
@@ -366,6 +398,10 @@
     }
     return [...seen.values()].sort((a, b) => b.date.localeCompare(a.date));
   };
+
+  /** Guests who have come often enough that they should probably be regulars. */
+  PB.regularSuggestions = (data, minVisits = 3) =>
+    PB.knownGuests(data).filter((g) => g.count >= minVisits).sort((a, b) => b.count - a.count);
 
   /** How often each person played since `sinceDate` (for sorting chips). */
   PB.frequency = (data, sinceDate = '') => {
@@ -390,12 +426,20 @@
     return `${PB.dayLabel(i.date)}: ${PB.money(i.amount, cur)}`;
   };
 
+  // "Jeremy: $106.91" lines, so a host knows what to collect from each guest.
+  const guestShareLines = (entry, cur) => entry.guests.map((g) =>
+    `${g.name}${g.count > 1 ? ` (${g.count} games)` : ''}: ${PB.money(g.amount, cur)}`);
+
   PB.playerMessage = (entry, month, settings) => {
     const cur = settings.currency || '$';
     const lines = entry.items.map((i) => `• ${describeItem(i, cur)}`);
+    const shares = entry.guests.length
+      ? [`Your own games: ${PB.money(entry.own, cur)}`, ...guestShareLines(entry, cur)]
+      : [];
     return [
       `Hi ${entry.name}! Your ${settings.club_name || 'pickleball'} court fees for ${PB.monthLabel(month)}:`,
       ...lines,
+      ...shares,
       `Total: ${PB.money(entry.total, cur)}`,
       'Thanks! 🥒🎾',
     ].join('\n');
@@ -410,6 +454,7 @@
       ...entry.items.filter((i) => i.kind === 'booking').map((i) => `• ${describeItem(i, cur)}`),
       `Less your court fees: ${PB.money(entry.charges, cur)}`,
       ...own.map((i) => `• ${describeItem(i, cur)}`),
+      ...(entry.guests.length ? guestShareLines(entry, cur).map((l) => `Of which ${l}`) : []),
       entry.payback >= 0
         ? `Payback to you: ${PB.money(entry.payback, cur)}`
         : `You owe: ${PB.money(-entry.payback, cur)}`,
@@ -426,15 +471,36 @@
       `It's added to your monthly total! 🥒🎾`;
   };
 
+  /**
+   * The monthly summary for the group chat. Everyone is listed with their own
+   * fee; guests get their own line (with their host named) so the host knows
+   * what to collect. Members are shown too, but their fee comes off their
+   * payback. *Stars* make the headings bold in WhatsApp.
+   */
   PB.groupMessage = (stmt, settings) => {
     const cur = settings.currency || '$';
-    const lines = [`${settings.club_name || 'Pickleball'} — ${PB.monthLabel(stmt.month)} court fees`];
-    for (const p of stmt.players) {
-      const g = p.guestCount ? ` (incl. ${p.guestCount} guest${p.guestCount > 1 ? 's' : ''})` : '';
-      lines.push(`• ${p.name}: ${PB.money(p.total, cur)}${g}`);
+    const line = (name, amount, note = '') => `• ${name}: ${PB.money(amount, cur)}${note}`;
+    const out = [`*${settings.club_name || 'Pickleball'} — ${PB.monthLabel(stmt.month)} court fees*`];
+
+    const regulars = stmt.players.filter((p) => !p.isGuest && p.own > 0);
+    if (regulars.length) out.push('', '*Regulars*', ...regulars.map((p) => line(p.name, p.own)));
+
+    const guests = stmt.players.filter((p) => p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
+    for (const host of [...stmt.players, ...stmt.members]) {
+      for (const g of host.guests) {
+        const note = host.name === 'Unassigned' ? ' (no payer set)' : ` (${host.name}'s guest)`;
+        guests.push({ name: g.name, amount: g.amount, note });
+      }
     }
-    lines.push(`Please pay ${settings.pay_to || 'the organiser'}. Thanks! 🥒🎾`);
-    return lines.join('\n');
+    guests.sort((a, b) => a.name.localeCompare(b.name));
+    if (guests.length) out.push('', '*Guests*', ...guests.map((g) => line(g.name, g.amount, g.note)));
+
+    const members = stmt.members.filter((m) => m.own > 0);
+    if (members.length) out.push('', '*Members* (taken off their payback)', ...members.map((m) => line(m.name, m.own)));
+
+    const hosted = guests.some((g) => g.note);
+    out.push('', `Please pay ${settings.pay_to || 'the organiser'}${hosted ? ' — hosts settle up for their guests' : ''}. Thanks! 🥒🎾`);
+    return out.join('\n');
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PB;

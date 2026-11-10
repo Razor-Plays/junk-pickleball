@@ -109,6 +109,7 @@ a.btn { display: inline-block; text-decoration: none; }
 .btn.ghost { background: transparent; color: var(--brand); padding: 8px 10px; }
 .btn.danger { background: transparent; color: var(--bad); }
 .btn.block { width: 100%; }
+.btn.compact { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
