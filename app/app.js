@@ -482,7 +482,7 @@
 
     const guestNote = (entry) => entry.guests.map((g) => `${esc(g.name)} ${money(g.amount)}`).join(', ');
     const playerCard = (p) => `
-      <div class="card">
+      <div class="card" data-card="${esc(p.name)}">
         <div class="row" style="padding:0;border:0">
           <div class="grow"><div class="title">${esc(p.name)}${p.isGuest ? ' <span class="pill">guest</span>' : ''}</div>
             <div class="sub">${p.games} game${p.games === 1 ? '' : 's'}${p.guests.length ? ` · incl. ${guestNote(p)}` : ''}</div></div>
@@ -498,7 +498,7 @@
     const guestCards = st.players.filter((p) => p.isGuest).map(playerCard).join('');
 
     const memberCards = st.members.map((m) => `
-      <div class="card">
+      <div class="card" data-card="${esc(m.name)}">
         <div class="row" style="padding:0;border:0">
           <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
             <div class="sub">booked ${money(m.credits)} − court fees ${money(m.charges)}${m.guests.length ? ` (incl. ${guestNote(m)})` : ''}</div></div>
@@ -517,6 +517,32 @@
 
     const paidCount = st.players.filter((p) => p.paid).length;
 
+    // The month at a glance: one line per person, like the old Monthly Bill tab.
+    const isOpen = (key) => store.get(`jpb.open.${key}`) !== '0';
+    const glanceRow = (name, note, amount, paid, neg = false) => `
+      <button class="glance-row" data-action="jump-card" data-person="${esc(name)}">
+        <span class="name">${esc(name)}${note ? `<span class="note">${note}</span>` : ''}</span>
+        ${paid ? '<span class="tick">✓ paid</span>' : ''}
+        <span class="amount ${neg ? 'neg' : ''}">${amount}</span>
+      </button>`;
+    const playersGlance = st.players.length ? `
+      <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
+        <summary><span class="grow">Players <span class="count">· ${paidCount}/${st.players.length} paid</span></span>
+          <span class="amount">${money(st.totals.players)}</span></summary>
+        ${st.players.map((p) => glanceRow(p.name,
+          [p.isGuest ? 'guest' : '', p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : ''].filter(Boolean).join(' · '),
+          money(p.total), p.paid)).join('')}
+        <div class="glance-row total"><span class="name">Total to collect</span><span class="amount">${money(st.totals.players)}</span></div>
+      </details>` : '';
+    const membersGlance = st.members.length ? `
+      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
+        <summary><span class="grow">Members <span class="count">· payback from ${esc(s.pay_to || 'Tommy')}</span></span>
+          <span class="amount">${money(st.totals.payback)}</span></summary>
+        ${st.members.map((m) => glanceRow(m.name, `booked ${money(m.credits)} − fees ${money(m.charges)}`,
+          m.payback < 0 ? `owes ${money(-m.payback)}` : money(m.payback), m.paid, m.payback < 0)).join('')}
+        <div class="glance-row total"><span class="name">Total payback</span><span class="amount">${money(st.totals.payback)}</span></div>
+      </details>` : '';
+
     return `
       <div class="month-nav">
         <button data-action="month" data-delta="-1" aria-label="Previous month">‹</button>
@@ -534,10 +560,13 @@
         <div class="stat"><div class="label">Players paid</div><div class="value">${paidCount}/${st.players.length}</div></div>
       </div>` : ''}
 
-      ${regularCards ? `<h2>Regulars</h2>${regularCards}` : ''}
-      ${guestCards ? `<h2>Guests paying their own way</h2>${guestCards}` : ''}
+      ${playersGlance}
+      ${membersGlance}
       ${st.sessions.length ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
-      ${st.members.length ? `<h2>Members — payback from ${esc(s.pay_to || 'Tommy')}</h2>${memberCards}` : ''}
+
+      ${regularCards ? `<h2>Regulars — details</h2>${regularCards}` : ''}
+      ${guestCards ? `<h2>Guests paying their own way — details</h2>${guestCards}` : ''}
+      ${st.members.length ? `<h2>Members — details</h2>${memberCards}` : ''}
       ${r ? `<h2>Reclub</h2>
         <div class="card">
           <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub players × ${money(d.settings.reclub_fee)}</div><div class="amount">${money(r.income)}</div></div>
@@ -803,6 +832,15 @@
         sendText(text, p && p.phone);
         break;
       }
+      case 'jump-card': {
+        const card = [...document.querySelectorAll('#view .card[data-card]')].find((c) => c.dataset.card === t.dataset.person);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('flash');
+          setTimeout(() => card.classList.remove('flash'), 1500);
+        }
+        break;
+      }
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(); break;
@@ -831,6 +869,12 @@
       default: break;
     }
   });
+
+  // Remember which glance tables are folded away (the toggle event doesn't bubble).
+  document.addEventListener('toggle', (ev) => {
+    const key = ev.target && ev.target.dataset ? ev.target.dataset.glance : '';
+    if (key) store.set(`jpb.open.${key}`, ev.target.open ? '1' : '0');
+  }, true);
 
   document.addEventListener('input', (ev) => {
     const dr = state.draft;
