@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f7a4d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Pickleball" />
+  <title>Junk Pickleball</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🥒 <span id="clubName">Junk Pickleball</span></div>
+    <button class="icon-btn" data-action="refresh" aria-label="Refresh" title="Refresh">⟳</button>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="sessions" class="active"><span>📅</span>Sessions</button>
+    <button data-tab="bills"><span>💸</span>Bills</button>
+    <button data-tab="club"><span>⚙️</span>Club</button>
+  </nav>
+
+  <div id="sheet" class="sheet" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="billing.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

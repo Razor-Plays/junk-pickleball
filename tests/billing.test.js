@@ -1,0 +1,155 @@
+// Run with: node --test tests/
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const PB = require('../app/billing.js');
+const { migrate, parseGuestLabel } = require('../tools/migrate-legacy.js');
+
+// Small made-up club: two members, three players.
+const raw = {
+  settings: { default_rate: 140, reclub_fee: 100 },
+  players: [
+    { name: 'Ann', role: 'member', active: 'TRUE' },
+    { name: 'Ben', role: 'member', active: 'TRUE' },
+    { name: 'Cat', role: 'player', active: 'TRUE' },
+    { name: 'Dan', role: 'player', active: 'TRUE' },
+    { name: 'Eve', role: 'player', active: 'FALSE' },
+  ],
+  sessions: [
+    { id: 's1', date: '2026-10-01', reclub_fee: 100 },
+    { id: 's2', date: '2026-10-08', reclub_fee: 100 },
+    { id: 's3', date: '2026-11-05', reclub_fee: 120 },
+  ],
+  bookings: [
+    { session_id: 's1', member: 'Ann', hours: 1, rate: 140 },
+    { session_id: 's1', member: 'Ben', hours: 1, rate: 140 },
+    { session_id: 's2', member: 'Ann', hours: 2, rate: 140 },
+    { session_id: 's3', member: 'Ben', hours: 2, rate: 160 },
+  ],
+  attendance: [
+    // s1: 4 heads, 280 / 4 = 70
+    { session_id: 's1', name: 'Ann', guest: 'FALSE', pays: 'Ann' },
+    { session_id: 's1', name: 'Cat', guest: 'FALSE', pays: 'Cat' },
+    { session_id: 's1', name: 'Dan', guest: 'FALSE', pays: 'Dan' },
+    { session_id: 's1', name: 'Zoe', guest: 'TRUE', pays: 'Cat' },
+    // s2: 3 heads, 280 / 3 = 93.33
+    { session_id: 's2', name: 'Ben', guest: 'FALSE', pays: 'Ben' },
+    { session_id: 's2', name: 'Cat', guest: 'FALSE', pays: 'Cat' },
+    { session_id: 's2', name: 'Reclub guest', guest: 'TRUE', pays: 'Reclub' },
+    // s3: 4 heads, 320 / 4 = 80, Reclub fee 120 on this session
+    { session_id: 's3', name: 'Ann', guest: 'FALSE', pays: 'Ann' },
+    { session_id: 's3', name: 'Dan', guest: 'FALSE', pays: 'Dan' },
+    { session_id: 's3', name: 'Reclub guest', guest: 'TRUE', pays: 'Reclub' },
+    { session_id: 's3', name: 'Reclub guest', guest: 'TRUE', pays: 'Reclub' },
+  ],
+  memberships: [
+    { id: 'm1', member: 'Ann', date: '2026-01-01', amount: 1400, hours: 10, rate: 140 },
+    { id: 'm2', member: 'Ben', date: '2026-01-01', amount: 140, hours: 1, rate: 140 },
+    { id: 'm3', member: 'Ben', date: '2026-10-15', amount: 1600, hours: 10, rate: 160 },
+  ],
+  payments: [{ month: '2026-10', person: 'Cat', amount: 233.33, paid_on: '2026-11-01' }],
+  kitty: [{ id: 'k1', date: '2026-10-20', description: 'Balls', amount: -50 }],
+};
+const data = PB.normalize(raw);
+
+test('session cost per player', () => {
+  const s = PB.sessionSummary(data, data.sessions[0]);
+  assert.equal(s.cost, 280);
+  assert.equal(s.heads, 4);
+  assert.equal(s.cpp, 70);
+  assert.equal(PB.sessionSummary(data, data.sessions[1]).cpp, 93.33);
+});
+
+test('players pay for their guests', () => {
+  const st = PB.monthStatement(data, '2026-10');
+  const cat = st.players.find((p) => p.name === 'Cat');
+  assert.equal(cat.total, 233.33); // 70 + guest Zoe 70 + 93.33
+  assert.equal(cat.guestCount, 1);
+  assert.ok(cat.paid, 'payment row is picked up');
+  assert.equal(st.players.find((p) => p.name === 'Dan').total, 70);
+});
+
+test('members are not billed; payback is booked value minus own fees', () => {
+  const st = PB.monthStatement(data, '2026-10');
+  assert.equal(st.players.some((p) => p.name === 'Ann' || p.name === 'Ben'), false);
+  const ann = st.members.find((m) => m.name === 'Ann');
+  const ben = st.members.find((m) => m.name === 'Ben');
+  assert.equal(ann.payback, 420 - 70);       // booked 1h + 2h, played s1
+  assert.equal(ben.payback, PB.round2(140 - 93.33));
+});
+
+test('every court dollar is accounted for', () => {
+  const st = PB.monthStatement(data, '2026-10');
+  const ownFees = st.members.reduce((s, m) => s + m.charges, 0);
+  const total = PB.round2(st.totals.players + ownFees + st.reclub.courtShare);
+  assert.ok(Math.abs(total - st.totals.courtCost) < 0.05, `${total} vs ${st.totals.courtCost}`);
+  assert.equal(st.totals.balanced, true);
+});
+
+test('Reclub fee is stored per session and goes to the kitty', () => {
+  const nov = PB.monthStatement(data, '2026-11');
+  assert.equal(nov.reclub.income, 240);       // 2 x 120
+  assert.equal(nov.reclub.profit, 80);        // 240 - 2 x 80
+  const k = PB.kitty(data);
+  assert.equal(k.reclubProfit, PB.round2((100 - 93.33) + 80));
+  assert.equal(k.balance, PB.round2(k.reclubProfit - 50));
+});
+
+test('rates stay with the session they were booked on', () => {
+  const nov = PB.monthStatement(data, '2026-11');
+  assert.equal(nov.totals.courtCost, 320);    // 2h at 160, not today's default 140
+});
+
+test('membership balances and next rate use the oldest lot first', () => {
+  const bal = PB.membershipBalances(data);
+  const ann = bal.find((b) => b.name === 'Ann');
+  assert.deepEqual([ann.purchased, ann.used, ann.left], [10, 3, 7]);
+  const ben = bal.find((b) => b.name === 'Ben');
+  assert.deepEqual([ben.purchased, ben.used, ben.left], [11, 3, 8]);
+  assert.equal(PB.nextRate(data, 'Ben'), 160); // first lot (1h) used up
+  assert.equal(PB.nextRate(data, 'Ann'), 140);
+});
+
+test('warnings for sessions missing players or bookings', () => {
+  const d = PB.normalize({ ...raw, sessions: [...raw.sessions, { id: 's4', date: '2026-10-22' }],
+    bookings: [...raw.bookings, { session_id: 's4', member: 'Ann', hours: 2, rate: 140 }] });
+  const st = PB.monthStatement(d, '2026-10');
+  assert.equal(st.warnings.length, 1);
+  assert.match(st.warnings[0].text, /no players/);
+  assert.equal(st.totals.unallocated, 280);
+});
+
+test('messages', () => {
+  const st = PB.monthStatement(data, '2026-10');
+  const msg = PB.playerMessage(st.players.find((p) => p.name === 'Cat'), '2026-10', data.settings);
+  assert.match(msg, /October 2026/);
+  assert.match(msg, /guest Zoe \$70\.00/);
+  assert.match(msg, /Total: \$233\.33/);
+  const mm = PB.memberMessage(st.members.find((m) => m.name === 'Ann'), '2026-10', data.settings);
+  assert.match(mm, /Payback to you: \$350\.00/);
+});
+
+test('legacy guest labels', () => {
+  const known = new Set(['Foong', 'Donna']);
+  assert.deepEqual(parseGuestLabel("Foong's friend Jeremy", known), { name: 'Jeremy', pays: 'Foong' });
+  assert.deepEqual(parseGuestLabel('Donna Friend - Logan', known), { name: 'Logan', pays: 'Donna' });
+  assert.deepEqual(parseGuestLabel("Donna's Friend", known), { name: "Donna's friend", pays: 'Donna' });
+  assert.deepEqual(parseGuestLabel('Reclub $100', known), { name: 'Reclub guest', pays: 'Reclub' });
+  assert.deepEqual(parseGuestLabel('Reclulb', known), { name: 'Reclub guest', pays: 'Reclub' });
+  assert.deepEqual(parseGuestLabel('Ange', known), { name: 'Ange', pays: 'Ange' });
+});
+
+test('legacy migration fills Reclub counts and keeps labelled guests', () => {
+  const out = migrate({
+    members: ['Ann', 'Ben'], rate: 140,
+    rows: [{ row: 3, serial: 46317, hours: [1, 1] }],          // 2026-10-22
+    attendance: { 3: ['Ann', 'Cat', 'Guest 1', 'Guest 2', 'Guest 3'] },
+    comments: [{ row: 3, col: 'H', label: "Cat's friend Max", status: 'OPEN' }],
+    reclubCounts: { '2026-10-22': 2 },
+    players: ['Ann', 'Ben', 'Cat', 'Guest 1'],
+  });
+  assert.equal(out.sessions[0].date, '2026-10-22');
+  assert.deepEqual(out.attendance.map((a) => [a.name, a.pays]),
+    [['Ann', 'Ann'], ['Cat', 'Cat'], ['Reclub guest', 'Reclub'], ['Reclub guest', 'Reclub'], ['Max', 'Cat']]);
+  assert.deepEqual(out.players.map((p) => p.name), ['Ann', 'Ben', 'Cat']);
+});

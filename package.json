@@ -1,0 +1,8 @@
+{
+  "name": "junk-pickleball",
+  "private": true,
+  "description": "Mobile app for Junk Pickleball sessions, bills and memberships (Google Sheet backend).",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  }
+}
