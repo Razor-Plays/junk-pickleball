@@ -4,7 +4,7 @@
 
   const LS = {
     api: 'jpb.apiUrl',
-    pin: 'jpb.pin',
+    code: 'jpb.code',
     cache: 'jpb.cache',
     tab: 'jpb.tab',
   };
@@ -16,7 +16,7 @@
 
   const state = {
     apiUrl: (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || store.get(LS.api) || '',
-    pin: store.get(LS.pin) || '',
+    code: store.get(LS.code) || '',
     raw: null,
     data: null,
     tab: store.get(LS.tab) || 'sessions',
@@ -25,6 +25,31 @@
     draft: null,      // session being edited
     showAllSessions: false,
   };
+
+  const API_URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+  const configuredUrl = (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || '';
+
+  (function readInviteLink() {
+    if (!location.hash || location.hash.length < 3) return;
+    const params = new URLSearchParams(location.hash.slice(1));
+    const k = (params.get('k') || '').trim();
+    const u = (params.get('u') || '').trim();
+    if (k) {
+      // Only kept once it has worked, so a stale link can't sign a phone out.
+      state.invite = { prevCode: state.code, prevUrl: state.apiUrl };
+      if (!configuredUrl && API_URL_RE.test(u)) state.apiUrl = u;
+      state.code = k;
+    }
+    // Take the code out of the address bar so it isn't left in history or screenshots.
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+  })();
+
+  function inviteLink() {
+    const params = new URLSearchParams();
+    params.set('k', state.code);
+    if (!configuredUrl) params.set('u', state.apiUrl);
+    return `${location.origin}${location.pathname}#${params.toString()}`;
+  }
 
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (v) => String(v === null || v === undefined ? '' : v)
@@ -58,7 +83,7 @@
       const res = await fetch(state.apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ pin: state.pin, action, payload }),
+        body: JSON.stringify({ code: state.code, action, payload }),
         redirect: 'follow',
       });
       const json = await res.json();
@@ -93,10 +118,10 @@
   }
 
   function handleError(e) {
-    if (e.code === 'pin') {
-      store.del(LS.pin);
-      state.pin = '';
-      toast('Wrong PIN', true);
+    if (e.code === 'auth') {
+      store.del(LS.code);
+      state.code = '';
+      toast('Wrong access code', true);
       render();
       return;
     }
@@ -143,7 +168,7 @@
   function render() {
     document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
     const view = $('#view');
-    if (!state.apiUrl || !state.pin) {
+    if (!state.apiUrl || !state.code) {
       $('#tabbar').hidden = true;
       view.innerHTML = renderSetup();
       return;
@@ -162,13 +187,13 @@
     return `
       <div class="setup card">
         <h2>Connect to the sheet</h2>
-        <p class="small muted">One-time setup on this device. Ask Neil for the PIN.</p>
+        <p class="small muted">One-time setup on this device. Ask whoever runs the club for the invite link or the access code.</p>
         ${window.JPB_CONFIG && window.JPB_CONFIG.apiUrl ? '' : `
         <label class="field"><span>Sheet API URL (ends in /exec)</span>
           <input type="text" id="setupUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" />
         </label>`}
-        <label class="field"><span>PIN</span>
-          <input type="tel" id="setupPin" inputmode="numeric" autocomplete="off" />
+        <label class="field"><span>Access code</span>
+          <input type="text" id="setupCode" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" />
         </label>
         <button class="btn block" data-action="connect">Connect</button>
       </div>`;
@@ -227,6 +252,7 @@
       const att = d.attendance.filter((a) => a.session_id === id);
       draft = {
         id, isNew: false, date: s.date, notes: s.notes, reclub_fee: s.reclub_fee,
+        baseUpdatedAt: s.updated_at || '',
         bookings,
         players: att.filter((a) => !a.guest).map((a) => a.name),
         guests: att.filter((a) => a.guest).map((a) => ({ name: a.name, pays: a.pays })),
@@ -237,7 +263,9 @@
     } else {
       const date = todayISO();
       draft = {
-        id: null, isNew: true, date, notes: '', reclub_fee: d.settings.reclub_fee,
+        // The id is fixed now, so tapping Save twice (or retrying after a
+        // dropped connection) updates the same session instead of adding a copy.
+        id: PB.newSessionId(date), isNew: true, date, notes: '', reclub_fee: d.settings.reclub_fee,
         bookings: {}, players: [], guests: [], search: '',
       };
     }
@@ -327,10 +355,11 @@
         <h2>Guests <span class="pill">${dr.guests.length}</span></h2>
         ${dr.guests.map((g, i) => `
           <div class="guest-row">
-            <input type="text" placeholder="Guest name" data-guest-name="${i}" value="${esc(g.name)}" />
+            <input type="text" placeholder="Guest name" list="knownGuests" autocomplete="off" data-guest-name="${i}" value="${esc(g.name)}" />
             <select data-guest-pays="${i}">${payOptions(g.pays === g.name && g.name ? '__self' : g.pays)}</select>
             <button data-action="remove-guest" data-index="${i}" aria-label="Remove guest">✕</button>
           </div>`).join('')}
+        <datalist id="knownGuests">${PB.knownGuests(d).map((g) => `<option value="${esc(g.name)}">${g.pays === g.name ? 'pays own way' : 'with ' + esc(g.pays)}</option>`).join('')}</datalist>
         <div class="btn-row">
           <button class="btn secondary" data-action="add-guest">＋ Guest</button>
           <button class="btn secondary" data-action="add-reclub">＋ Reclub player</button>
@@ -360,6 +389,7 @@
   async function saveDraft() {
     const dr = state.draft;
     const d = state.data;
+    if (state.busy) return;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dr.date)) return toast('Pick a date', true);
     for (const g of dr.guests) {
       if (!g.name.trim()) return toast('Every guest needs a name', true);
@@ -372,8 +402,9 @@
     const dupe = d.sessions.find((s) => s.date === dr.date && s.id !== dr.id);
     if (dupe && dr.isNew && !window.confirm(`There's already a session on ${PB.dayLabel(dr.date)}. Save a second one?`)) return;
 
-    const id = dr.id || PB.newSessionId(dr.date);
+    const id = dr.id;
     const payload = {
+      ...(dr.isNew ? {} : { base_updated_at: dr.baseUpdatedAt }),
       session: { id, date: dr.date, reclub_fee: dr.reclub_fee, notes: dr.notes },
       bookings: Object.entries(dr.bookings)
         .filter(([, b]) => Number(b.hours) > 0)
@@ -405,10 +436,17 @@
     const st = PB.monthStatement(d, state.month);
     const s = d.settings;
 
-    const paidPill = (entry, amount) => `
-      <button class="pill ${entry.paid ? 'paid' : ''}" style="border:0;cursor:pointer" data-action="toggle-paid"
+    const paidPill = (entry, amount) => {
+      const changed = entry.paid && Math.abs(entry.paid.amount - amount) > 0.01;
+      return `
+      <button class="pill ${entry.paid ? (changed ? 'warn' : 'paid') : ''}" style="border:0;cursor:pointer" data-action="toggle-paid"
         data-person="${esc(entry.name)}" data-amount="${amount}" data-paid="${entry.paid ? 1 : 0}">
-        ${entry.paid ? '✓ Paid' : 'Mark paid'}</button>`;
+        ${entry.paid ? (changed ? `Paid ${money(entry.paid.amount)} · bill changed` : '✓ Paid') : 'Mark paid'}</button>`;
+    };
+
+    const owing = PB.outstanding(d, state.month);
+    const owingBox = owing.length ? `<div class="warn-box"><b>Still unpaid from earlier months</b><ul>${
+      owing.map((o) => `<li>${esc(o.name)} — ${money(o.amount)} (${esc(PB.monthLabel(o.month))})</li>`).join('')}</ul></div>` : '';
 
     const itemList = (items) => `<details class="items"><summary>${items.length} line${items.length === 1 ? '' : 's'}</summary><ul>${
       items.map((i) => `<li>${esc(PB.dayLabel(i.date))}: ${
@@ -457,6 +495,7 @@
       </div>
       ${st.sessions.length ? '' : '<div class="empty">No sessions this month.</div>'}
       ${warnings}
+      ${owingBox}
       ${st.sessions.length ? `
       <div class="stats">
         <div class="stat"><div class="label">Collect from players</div><div class="value">${money(st.totals.players)}</div></div>
@@ -525,7 +564,18 @@
         <label class="field"><span>Reclub fee per player (new sessions)</span><input type="number" inputmode="decimal" id="sReclub" value="${esc(d.settings.reclub_fee)}" /></label>
         <label class="field"><span>Who collects money</span><input type="text" id="sPayTo" value="${esc(d.settings.pay_to)}" /></label>
         <label class="field"><span>Currency symbol</span><input type="text" id="sCur" value="${esc(d.settings.currency)}" /></label>
+        <label class="field"><span>Public stats page (first names and dates played only — no money)</span><select id="sStats">
+          <option value="TRUE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? ' selected' : ''}>On — anyone with the link can see it</option>
+          <option value="FALSE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? '' : ' selected'}>Off</option></select></label>
         <button class="btn" data-action="save-settings">Save settings</button>
+      </div>
+      <h2>Share</h2>
+      <div class="card">
+        <p class="small muted" style="margin-top:0">The invite link signs another phone in with one tap. It gives full access, so only send it to people who run the club.</p>
+        <div class="btn-row">
+          <button class="btn secondary" data-action="share-invite">Send invite link</button>
+          <a class="btn ghost" href="../" target="_blank" rel="noopener">Open stats page</a>
+        </div>
       </div>
       <p class="small muted center">Data from the Google Sheet · loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
         <button class="btn ghost small" data-action="sign-out">Sign out on this device</button></p>`;
@@ -616,16 +666,16 @@
     switch (a) {
       case 'connect': {
         const url = ($('#setupUrl') && $('#setupUrl').value.trim()) || state.apiUrl;
-        const pin = $('#setupPin').value.trim();
-        if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) return toast('That URL should end in /exec', true);
-        if (!pin) return toast('Enter the PIN', true);
-        state.apiUrl = url; state.pin = pin;
+        const code = $('#setupCode').value.trim();
+        if (!API_URL_RE.test(url)) return toast('That URL should start with script.google.com and end in /exec', true);
+        if (!code) return toast('Enter the access code', true);
+        state.apiUrl = url; state.code = code;
         try {
           await api('load');
-          store.set(LS.api, url); store.set(LS.pin, pin);
+          store.set(LS.api, url); store.set(LS.code, code);
           toast('Connected');
           render();
-        } catch (e) { state.pin = ''; handleError(e); }
+        } catch (e) { state.code = ''; handleError(e); }
         break;
       }
       case 'refresh': if (!state.busy) refresh(); break;
@@ -673,7 +723,7 @@
       case 'month': state.month = PB.shiftMonth(state.month, Number(t.dataset.delta)); render(); break;
       case 'toggle-paid': {
         const paid = t.dataset.paid !== '1';
-        save('setPaid', { month: state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount) },
+        save('setPaid', { month: state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount), paid_on: todayISO() },
           paid ? `${t.dataset.person} marked paid` : 'Unmarked').then(render);
         break;
       }
@@ -689,6 +739,12 @@
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(); break;
+      case 'share-invite': {
+        const link = inviteLink();
+        if (navigator.share) navigator.share({ text: `Junk Pickleball manager app — tap to sign in: ${link}` }).catch(() => {});
+        else copyText(link);
+        break;
+      }
       case 'add-kitty': addKitty(); break;
       case 'delete-kitty':
         if (window.confirm('Remove this kitty entry?')) save('deleteKitty', { id: t.dataset.id }, 'Removed').then(render);
@@ -697,11 +753,12 @@
         save('saveSettings', {
           club_name: $('#sClub').value.trim(), default_rate: $('#sRate').value, reclub_fee: $('#sReclub').value,
           pay_to: $('#sPayTo').value.trim(), currency: $('#sCur').value.trim() || '$',
+          public_stats: $('#sStats').value,
         }, 'Settings saved').then(render);
         break;
       case 'sign-out':
-        if (window.confirm('Forget the PIN on this device?')) {
-          store.del(LS.pin); store.del(LS.cache); state.pin = ''; state.data = null; render();
+        if (window.confirm('Forget the access code on this device?')) {
+          store.del(LS.code); store.del(LS.cache); state.code = ''; state.data = null; render();
         }
         break;
       default: break;
@@ -736,6 +793,16 @@
     const el = ev.target;
     if (el.id === 'dDate') {
       dr.date = el.value;
+    } else if (el.dataset.guestName !== undefined) {
+      // A returning guest: fill in who paid for them last time.
+      const g = dr.guests[Number(el.dataset.guestName)];
+      const known = PB.knownGuests(state.data).find((k) => k.name.toLowerCase() === g.name.trim().toLowerCase());
+      if (known && (!g.pays || g.pays === '__self')) {
+        g.name = known.name;
+        if (known.pays === known.name) g.pays = known.name;
+        else if (dr.players.includes(known.pays)) g.pays = known.pays;
+        renderSheet();
+      }
     } else if (el.dataset.guestPays !== undefined) {
       const g = dr.guests[Number(el.dataset.guestPays)];
       g.pays = el.value === '__self' ? (g.name || '__self') : el.value;
@@ -749,6 +816,28 @@
   if (cached) {
     try { setData(JSON.parse(cached)); } catch (e) { store.del(LS.cache); }
   }
-  render();
-  if (state.apiUrl && state.pin) refresh(true);
+  async function start() {
+    render();
+    if (!state.apiUrl || !state.code) return;
+    const invite = state.invite;
+    state.invite = null;
+    if (!invite) { refresh(true); return; }
+    try {
+      await api('load');
+      store.set(LS.code, state.code);
+      if (!configuredUrl) store.set(LS.api, state.apiUrl);
+      toast('Signed in');
+      render();
+    } catch (e) {
+      if (e.code === 'auth' && invite.prevCode) {
+        state.code = invite.prevCode;
+        state.apiUrl = invite.prevUrl;
+        toast('That invite link is out of date', true);
+        refresh(true);
+      } else {
+        handleError(e);
+      }
+    }
+  }
+  start();
 })();

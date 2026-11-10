@@ -1,21 +1,29 @@
 /**
  * Junk Pickleball — sheet API for the mobile app.
  *
- * This script lives inside the NEW app spreadsheet (Extensions > Apps Script).
+ * Works two ways:
+ *   - bound to the app spreadsheet (Extensions > Apps Script), SHEET_ID empty
+ *   - as a standalone script, with SHEET_ID set to the spreadsheet's id
  * It never touches the old "Attendance 2.0" sheet.
  *
  * One-time setup:
- *   1. Paste this file into the script editor and save.
- *   2. Run `setup` once (approve the permissions prompt). It creates any
- *      missing tabs and puts a random PIN in Settings > app_pin.
- *   3. Deploy > New deployment > Web app
+ *   1. Run `setup` once if the sheet has no tabs or no access code yet.
+ *   2. Deploy > New deployment > Web app
  *        Execute as: Me      Who has access: Anyone
- *      Copy the /exec URL into the app's setup screen.
+ *      Copy the /exec URL into app/config.js (or the app's setup screen).
  *
- * Every request must include the PIN from the Settings tab.
+ * Every data request must include the access code from the Settings tab.
+ * The only thing served without it is the attendance-only stats feed, and
+ * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 1;
+const API_VERSION = 2;
+
+// Leave empty when this script is bound to the spreadsheet.
+const SHEET_ID = '';
+
+const MAX_FAILED_ATTEMPTS = 30;   // wrong access codes allowed ...
+const FAILURE_WINDOW_SECONDS = 600; // ... within this rolling window
 
 const TABS = {
   Players: ['name', 'role', 'active', 'phone', 'notes'],
@@ -37,12 +45,21 @@ const DEFAULT_SETTINGS = {
   reclub_fee: 100,
   currency: '$',
   pay_to: 'Tommy',
+  public_stats: 'TRUE',
 };
+
+function ss_() {
+  return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function tz_() {
+  return ss_().getSpreadsheetTimeZone();
+}
 
 // ---------------------------------------------------------------- setup
 
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = ss_();
   Object.keys(TABS).forEach(function (name) {
     let sh = ss.getSheetByName(name);
     if (!sh) sh = ss.insertSheet(name);
@@ -62,17 +79,61 @@ function setup() {
   Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
     if (!(k in settings)) toAdd.push([k, String(DEFAULT_SETTINGS[k])]);
   });
-  if (!settings.app_pin) toAdd.push(['app_pin', String(Math.floor(100000 + Math.random() * 900000))]);
+  if (!settings.access_code) toAdd.push(['access_code', newAccessCode_()]);
   if (toAdd.length) appendRows_('Settings', toAdd);
 
-  const pin = readSettings_().app_pin;
-  Logger.log('Setup done. App PIN is ' + pin + ' (change it in the Settings tab any time).');
+  Logger.log('Setup done. The access code is in the Settings tab (access_code). Change it there any time.');
+}
+
+/** 12 characters, no look-alikes (0/O, 1/l/I). Far too many to guess. */
+function newAccessCode_() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < 12; i++) {
+    if (i && i % 4 === 0) out += '-';
+    out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- web entry points
 
-function doGet() {
+function doGet(e) {
+  const view = e && e.parameter && e.parameter.view;
+  if (view === 'stats') return json_(publicStats_());
   return json_({ ok: true, app: 'junk-pickleball', version: API_VERSION });
+}
+
+/**
+ * Attendance only: who played on which date. No money, no phone numbers,
+ * no notes, and guests are shown as "Guest 1", "Guest 2"...
+ */
+function publicStats_() {
+  const settings = readSettings_();
+  if (String(settings.public_stats || '').toUpperCase() !== 'TRUE') {
+    return { ok: false, error: 'Public stats are turned off' };
+  }
+  const dates = {};
+  readTable_('Sessions').forEach(function (s) { dates[s.id] = s.date; });
+  const guestCount = {};
+  const rows = [];
+  let latest = '';
+  readTable_('Attendance').forEach(function (a) {
+    const date = dates[a.session_id];
+    if (!date) return;
+    let name = a.name;
+    if (isTrue_(a.guest)) {
+      guestCount[a.session_id] = (guestCount[a.session_id] || 0) + 1;
+      name = 'Guest ' + guestCount[a.session_id];
+    }
+    if (date > latest) latest = date;
+    rows.push({ session_date: date, session_id: a.session_id, player_name: name });
+  });
+  return { ok: true, club_name: settings.club_name || '', last_session: latest, rows: rows };
+}
+
+function isTrue_(v) {
+  return v === true || String(v).toUpperCase() === 'TRUE';
 }
 
 function doPost(e) {
@@ -83,10 +144,16 @@ function doPost(e) {
     return json_({ ok: false, error: 'Bad request' });
   }
 
-  const settings = readSettings_();
-  if (!settings.app_pin || String(body.pin || '') !== String(settings.app_pin)) {
+  const cache = CacheService.getScriptCache();
+  const failures = Number(cache.get('failed_attempts') || 0);
+  if (failures >= MAX_FAILED_ATTEMPTS) {
+    return json_({ ok: false, error: 'Too many wrong access codes. Try again in 10 minutes.', code: 'locked' });
+  }
+  const expected = String(readSettings_().access_code || '').trim();
+  if (!expected || String(body.code || '').trim() !== expected) {
+    cache.put('failed_attempts', String(failures + 1), FAILURE_WINDOW_SECONDS);
     Utilities.sleep(800); // slow down guessing
-    return json_({ ok: false, error: 'Wrong PIN', code: 'pin' });
+    return json_({ ok: false, error: 'Wrong access code', code: 'auth' });
   }
 
   const lock = LockService.getScriptLock();
@@ -109,11 +176,15 @@ function doPost(e) {
 const ACTIONS = {
   load: function () {},
 
-  /** payload: { session: {id, date, reclub_fee, notes}, bookings: [...], attendance: [...] } */
+  /** payload: { session: {id, date, reclub_fee, notes}, bookings: [...], attendance: [...], base_updated_at? } */
   saveSession: function (p) {
     const s = p.session || {};
     if (!s.id || !/^\d{4}-\d{2}-\d{2}$/.test(String(s.date || ''))) throw new Error('Session needs an id and a date');
     const id = String(s.id);
+    const existing = readTable_('Sessions').filter(function (r) { return r.id === id; })[0];
+    if (existing && p.base_updated_at !== undefined && String(existing.updated_at || '') !== String(p.base_updated_at || '')) {
+      throw new Error('Someone else just changed this session. Refresh and try again.');
+    }
     const row = {
       id: id,
       date: String(s.date),
@@ -175,7 +246,8 @@ const ACTIONS = {
     if (!/^\d{4}-\d{2}$/.test(month) || !person) throw new Error('Need month and person');
     deleteWhere_('Payments', function (r) { return r.month === month && r.person === person; });
     if (p.paid) {
-      appendObjects_('Payments', [{ month: month, person: person, amount: Number(p.amount || 0), paid_on: today_(), note: p.note || '' }]);
+      const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(String(p.paid_on || '')) ? String(p.paid_on) : today_();
+      appendObjects_('Payments', [{ month: month, person: person, amount: Number(p.amount || 0), paid_on: paidOn, note: p.note || '' }]);
     }
   },
 
@@ -189,10 +261,10 @@ const ACTIONS = {
     deleteWhere_('Kitty', function (r) { return r.id === String(p.id); });
   },
 
-  /** payload: { key: value, ... } — app_pin can't be changed from the app. */
+  /** payload: { key: value, ... } — the access code can't be changed from the app. */
   saveSettings: function (p) {
     Object.keys(p).forEach(function (k) {
-      if (k === 'app_pin') return;
+      if (k === 'access_code') return;
       upsertBy_('Settings', 'key', k, { key: k, value: String(p[k]) });
     });
   },
@@ -202,7 +274,7 @@ const ACTIONS = {
 
 function loadAll_() {
   const settings = readSettings_();
-  delete settings.app_pin;
+  delete settings.access_code;
   return {
     version: API_VERSION,
     loaded_at: new Date().toISOString(),
@@ -224,7 +296,7 @@ function readSettings_() {
 }
 
 function sheet_(name) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  const sh = ss_().getSheetByName(name);
   if (!sh) throw new Error('Missing tab "' + name + '" — run setup()');
   return sh;
 }
@@ -234,7 +306,7 @@ function readTable_(name) {
   const headers = TABS[name];
   const last = sh.getLastRow();
   if (last < 2) return [];
-  const tz = Session.getScriptTimeZone();
+  const tz = tz_();
   const values = sh.getRange(2, 1, last - 1, headers.length).getValues();
   return values
     .filter(function (row) { return row.join('') !== ''; })
@@ -323,7 +395,7 @@ function renameEverywhere_(from, to) {
 }
 
 function today_() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
 }
 
 function json_(obj) {

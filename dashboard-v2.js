@@ -1,6 +1,8 @@
 (() => {
   const SHEET_ID = '1pe2SvzjhPTlWaRfMWkuXmErbjPWHGIEraELYhZxgAHA';
-  const BUILD_TAG = '2026-04-21.2';
+  const BUILD_TAG = '2026-11-10.1';
+  // The manager app's sheet API also serves an attendance-only feed (no money).
+  const API_URL = (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || '';
   const CSV_URL = (sheetName) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
   const SNAPSHOT_ATTENDANCE_URL = './data/attendance_export_snapshot.csv';
   const SNAPSHOT_META_URL = './data/source_meta_snapshot.csv';
@@ -641,7 +643,33 @@
     }
   }
 
+  async function loadApiData() {
+    const res = await fetch(`${API_URL}?view=stats`, { redirect: 'follow' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'stats feed unavailable');
+    return {
+      attendanceRows: json.rows || [],
+      metaRows: json.last_session ? [{ last_sync_date: json.last_session }] : [],
+      sourceMode: 'live',
+    };
+  }
+
+  async function loadSnapshotData(reason) {
+    const [attendanceRows, metaRows] = await Promise.all([
+      parseCsv(SNAPSHOT_ATTENDANCE_URL),
+      parseCsv(SNAPSHOT_META_URL).catch(() => []),
+    ]);
+    return { attendanceRows, metaRows, sourceMode: 'snapshot', sourceDetail: reason };
+  }
+
   async function loadSheetsData() {
+    if (API_URL) {
+      try {
+        return await loadApiData();
+      } catch (apiErr) {
+        return loadSnapshotData(apiErr?.message ? `live failed: ${apiErr.message}` : 'live fetch failed');
+      }
+    }
     try {
       const [attendanceRows, metaRows] = await Promise.all([
         parseCsv(CSV_URL('attendance_export')),
