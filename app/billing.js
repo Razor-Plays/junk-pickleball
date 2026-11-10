@@ -82,7 +82,7 @@
   PB.normalize = (raw) => {
     const r = raw || {};
     const settings = Object.assign(
-      { default_rate: 140, reclub_fee: 100, currency: '$', club_name: 'Junk Pickleball', pay_to: 'Tommy' },
+      { default_rate: 140, reclub_fee: 100, currency: '$', club_name: 'Junk Pickleball', pay_to: 'Tommy', public_stats: 'TRUE' },
       r.settings || {}
     );
     settings.default_rate = num(settings.default_rate, 140);
@@ -334,6 +334,37 @@
       reclubSessions: reclubSessions.sort((a, b) => b.date.localeCompare(a.date)),
       entries: [...data.kitty].sort((a, b) => b.date.localeCompare(a.date)),
     };
+  };
+
+  /**
+   * Unpaid bills from months before `month`. Only months where at least one
+   * payment was recorded count, so history from before payment tracking
+   * started doesn't show up as a wall of debts.
+   */
+  PB.outstanding = (data, month) => {
+    const tracked = [...new Set(data.payments.map((p) => p.month))].filter((m) => m < month).sort();
+    const out = [];
+    for (const m of tracked) {
+      const st = PB.monthStatement(data, m);
+      for (const p of st.players) if (!p.paid && p.total > 0) out.push({ month: m, name: p.name, amount: p.total });
+      for (const mem of st.members) if (!mem.paid && mem.payback < 0) out.push({ month: m, name: mem.name, amount: round2(-mem.payback) });
+    }
+    return out;
+  };
+
+  /** Named guests seen before, most recent first, with who paid for them last time. */
+  PB.knownGuests = (data) => {
+    const dates = new Map(data.sessions.map((s) => [s.id, s.date]));
+    const seen = new Map();
+    for (const a of data.attendance) {
+      if (!a.guest || a.pays === RECLUB || a.pays === 'Unassigned') continue;
+      if (/^guest\s*\d+$/i.test(a.name) || /friend$/i.test(a.name)) continue;
+      const date = dates.get(a.session_id) || '';
+      const cur = seen.get(a.name);
+      if (!cur || date >= cur.date) seen.set(a.name, { name: a.name, pays: a.pays, date, count: (cur ? cur.count : 0) + 1 });
+      else cur.count += 1;
+    }
+    return [...seen.values()].sort((a, b) => b.date.localeCompare(a.date));
   };
 
   /** How often each person played since `sinceDate` (for sorting chips). */

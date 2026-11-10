@@ -133,8 +133,8 @@
 </head>
 <body>
   <header>
-    <h1>Junk Pickleball — Live Dashboard (v2)</h1>
-    <span class="chip">Live Google Sheets feed</span>
+    <h1>Junk Pickleball — Stats</h1>
+    <a class="chip" href="app/" style="text-decoration:none">Manager app →</a>
   </header>
 
   <main>
@@ -217,9 +217,10 @@
       </div>
     </section>
 
-    <div class="footer">Client-side only • attendance_export as source of truth • <span id="buildTag">Build: loading…</span></div>
+    <div class="footer">Attendance only — no money shown • <span id="buildTag">Build: loading…</span></div>
   </main>
 
+  <script src="./app/config.js"></script>
   <script src="./dashboard-v2.js"></script>
 </body>
 </html>

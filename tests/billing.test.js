@@ -153,3 +153,20 @@ test('legacy migration fills Reclub counts and keeps labelled guests', () => {
     [['Ann', 'Ann'], ['Cat', 'Cat'], ['Reclub guest', 'Reclub'], ['Reclub guest', 'Reclub'], ['Max', 'Cat']]);
   assert.deepEqual(out.players.map((p) => p.name), ['Ann', 'Ben', 'Cat']);
 });
+
+test('unpaid bills from earlier months, only once payment tracking has started', () => {
+  // October has one payment on record (Cat), so October counts as tracked.
+  const owing = PB.outstanding(data, '2026-11');
+  assert.deepEqual(owing, [{ month: '2026-10', name: 'Dan', amount: 70 }]);
+  // Nothing is reported for the month being viewed, or before tracking began.
+  assert.deepEqual(PB.outstanding(data, '2026-10'), []);
+  assert.deepEqual(PB.outstanding(PB.normalize({ ...raw, payments: [] }), '2026-12'), []);
+});
+
+test('returning guests are remembered with who paid for them last', () => {
+  const d = PB.normalize({ ...raw, attendance: [...raw.attendance,
+    { session_id: 's3', name: 'Zoe', guest: 'TRUE', pays: 'Dan' },
+    { session_id: 's3', name: 'Guest 4', guest: 'TRUE', pays: 'Unassigned' },
+    { session_id: 's3', name: "Cat's friend", guest: 'TRUE', pays: 'Cat' }] });
+  assert.deepEqual(PB.knownGuests(d).map((g) => [g.name, g.pays, g.count]), [['Zoe', 'Dan', 2]]);
+});

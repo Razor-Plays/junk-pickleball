@@ -104,6 +104,7 @@ button.row:active { background: var(--brand-soft); }
   border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; font-weight: 600;
   background: var(--brand); color: var(--brand-ink);
 }
+a.btn { display: inline-block; text-decoration: none; }
 .btn.secondary { background: var(--brand-soft); color: var(--brand); }
 .btn.ghost { background: transparent; color: var(--brand); padding: 8px 10px; }
 .btn.danger { background: transparent; color: var(--bad); }
