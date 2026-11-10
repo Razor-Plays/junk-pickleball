@@ -17,7 +17,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 2;
+const API_VERSION = 3;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -115,6 +115,9 @@ function publicStats_() {
   }
   const dates = {};
   readTable_('Sessions').forEach(function (s) { dates[s.id] = s.date; });
+  // A guest who later became a regular keeps their earlier visits under their name.
+  const players = {};
+  readTable_('Players').forEach(function (p) { players[nameKey_(p.name)] = p.name; });
   const guestCount = {};
   const rows = [];
   let latest = '';
@@ -122,7 +125,10 @@ function publicStats_() {
     const date = dates[a.session_id];
     if (!date) return;
     let name = a.name;
-    if (isTrue_(a.guest)) {
+    const nowRegular = a.pays !== 'Reclub' && players[nameKey_(a.name)];
+    if (nowRegular) {
+      name = nowRegular;
+    } else if (isTrue_(a.guest)) {
       guestCount[a.session_id] = (guestCount[a.session_id] || 0) + 1;
       name = 'Guest ' + guestCount[a.session_id];
     }
@@ -130,6 +136,10 @@ function publicStats_() {
     rows.push({ session_date: date, session_id: a.session_id, player_name: name });
   });
   return { ok: true, club_name: settings.club_name || '', last_session: latest, rows: rows };
+}
+
+function nameKey_(v) {
+  return String(v === null || v === undefined ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function isTrue_(v) {
@@ -208,16 +218,19 @@ const ACTIONS = {
     deleteWhere_('Attendance', function (r) { return r.session_id === id; });
   },
 
-  /** payload: { originalName?, name, role, active, phone, notes } — renames update history too. */
+  /**
+   * payload: { originalName?, name, role, active, phone, notes, isNew? }
+   * Renames update history too (this is also how a guest becomes a regular).
+   * Names must be unique ignoring case and spacing, because bills are kept by name.
+   */
   savePlayer: function (p) {
     const name = String(p.name || '').trim();
     if (!name) throw new Error('Player needs a name');
     const original = String(p.originalName || name).trim();
-    if (original !== name) {
-      const clash = readTable_('Players').some(function (r) { return r.name === name; });
-      if (clash) throw new Error(name + ' already exists');
-      renameEverywhere_(original, name);
-    }
+    const taken = readTable_('Players').filter(function (r) { return nameKey_(r.name) === nameKey_(name); });
+    const clash = taken.some(function (r) { return r.name !== original; }) || (p.isNew && taken.length > 0);
+    if (clash) throw new Error('There is already a player called ' + taken[0].name + '. Add a last initial to tell them apart.');
+    if (original !== name) renameEverywhere_(original, name);
     upsertBy_('Players', 'name', name, {
       name: name,
       role: p.role === 'member' ? 'member' : 'player',

@@ -130,3 +130,36 @@ test('public stats feed shows attendance only, hides guest names, and can be swi
   assert.deepEqual(gas.get({ view: 'stats' }), { ok: false, error: 'Public stats are turned off' });
   assert.equal(gas.get().ok, true); // plain health check still answers, with no data
 });
+
+test('two players cannot share a name, and adding never overwrites an existing player', () => {
+  const { call } = fresh();
+  call('savePlayer', { name: 'Neil', role: 'member', active: true, phone: '+1 555' });
+  const dupe = call('savePlayer', { name: 'neil ', role: 'player', active: true, isNew: true });
+  assert.equal(dupe.ok, false);
+  assert.match(dupe.error, /already a player called Neil/);
+  const after = call('load').data.players;
+  assert.deepEqual(after.map((p) => [p.name, p.role, p.phone]), [['Neil', 'member', '+1 555']]);
+  assert.equal(call('savePlayer', { name: 'Neil G', role: 'player', active: true, isNew: true }).ok, true);
+  assert.equal(call('savePlayer', { originalName: 'Neil G', name: 'NEIL', role: 'player' }).ok, false);
+  assert.equal(call('savePlayer', { originalName: 'Neil', name: 'Neil', role: 'member', phone: '+1 777' }).ok, true); // plain edit
+});
+
+test('a guest becomes a regular: history follows them, even under a new name', () => {
+  const { gas, call } = fresh();
+  call('savePlayer', { name: 'Cat', role: 'player', active: true });
+  call('saveSession', session({ attendance: [
+    { name: 'Cat', guest: false, pays: 'Cat' },
+    { name: 'Max', guest: true, pays: 'Cat' },
+    { name: 'Clyde', guest: true, pays: 'Clyde' },
+  ] }));
+  call('setPaid', { month: '2026-11', person: 'Clyde', paid: true, amount: 93.33 });
+  const res = call('savePlayer', { originalName: 'Clyde', name: 'Clyde W', role: 'player', active: true, isNew: true });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.data.attendance.map((a) => [a.name, a.pays]), [['Cat', 'Cat'], ['Max', 'Cat'], ['Clyde W', 'Clyde W']]);
+  assert.equal(res.data.payments[0].person, 'Clyde W');
+  const st = PB.monthStatement(PB.normalize(res.data), '2026-11');
+  const clyde = st.players.find((p) => p.name === 'Clyde W');
+  assert.deepEqual([clyde.isGuest, clyde.total, !!clyde.paid], [false, 93.33, true]);
+  // stats: the new regular is named, the remaining guest is not
+  assert.deepEqual(gas.get({ view: 'stats' }).rows.map((r) => r.player_name), ['Cat', 'Guest 1', 'Clyde W']);
+});

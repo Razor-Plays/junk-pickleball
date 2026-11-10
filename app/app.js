@@ -6,6 +6,7 @@
     api: 'jpb.apiUrl',
     code: 'jpb.code',
     cache: 'jpb.cache',
+    notRegular: 'jpb.notRegular',
     tab: 'jpb.tab',
   };
   const store = {
@@ -229,9 +230,23 @@
     const balances = PB.membershipBalances(d).filter((b) => b.active);
     const low = balances.filter((b) => b.purchased && b.left <= 8);
 
+    let skipped = [];
+    try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
+    const suggestions = PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
+    const suggestionCards = suggestions.length ? `
+      <h2>Guests who keep coming</h2>
+      <div class="list">${suggestions.map((g) => `
+        <div class="row">
+          <div class="grow"><div class="title">${esc(g.name)}</div>
+            <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
+          <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}">Make a regular</button>
+          <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
+        </div>`).join('')}</div>` : '';
+
     return `
       ${low.length ? `<div class="warn-box">Membership hours running low: ${low.map((b) => `<b>${esc(b.name)}</b> ${b.left}h`).join(', ')}</div>` : ''}
       ${upcoming.length ? `<h2>Coming up</h2><div class="list">${upcoming.map(row).join('')}</div>` : ''}
+      ${suggestionCards}
       <h2>Sessions</h2>
       ${past.length ? `<div class="list">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions yet.</div>'}
       ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all sessions</button>' : ''}
@@ -250,12 +265,16 @@
       const bookings = {};
       for (const b of d.bookings.filter((x) => x.session_id === id)) bookings[b.member] = { hours: b.hours, rate: b.rate };
       const att = d.attendance.filter((a) => a.session_id === id);
+      const isGuestRow = (a) => a.guest && !(a.pays === a.name && PB.playerNamed(d, a.name));
       draft = {
         id, isNew: false, date: s.date, notes: s.notes, reclub_fee: s.reclub_fee,
         baseUpdatedAt: s.updated_at || '',
         bookings,
-        players: att.filter((a) => !a.guest).map((a) => a.name),
-        guests: att.filter((a) => a.guest).map((a) => ({ name: a.name, pays: a.pays })),
+        // A past guest who has since become a regular (and paid their own way)
+        // is shown as the player they now are.
+        players: att.filter((a) => !isGuestRow(a)).map((a) => a.name),
+        guests: att.filter(isGuestRow).map((a) => ({ name: a.name, pays: a.pays })),
+        keptGuests: new Set(att.filter(isGuestRow).map((a) => PB.nameKey(a.name))),
         search: '',
       };
       // keep members who booked but are now inactive visible
@@ -266,7 +285,7 @@
         // The id is fixed now, so tapping Save twice (or retrying after a
         // dropped connection) updates the same session instead of adding a copy.
         id: PB.newSessionId(date), isNew: true, date, notes: '', reclub_fee: d.settings.reclub_fee,
-        bookings: {}, players: [], guests: [], search: '',
+        bookings: {}, players: [], guests: [], keptGuests: new Set(), search: '',
       };
     }
     for (const m of members) {
@@ -349,7 +368,7 @@
         <input type="search" id="dSearch" placeholder="Search players" value="${esc(dr.search)}" style="margin-bottom:10px" />
         <div class="chips">
           ${list.map((p) => `<button class="chip${dr.players.includes(p.name) ? ' on' : ''}" data-action="toggle-player" data-name="${esc(p.name)}">${esc(p.name)}${p.role === 'member' ? '<span class="tag">★</span>' : ''}</button>`).join('')}
-          ${q && !list.some((p) => p.name.toLowerCase() === q) ? `<button class="chip" data-action="quick-add-player" data-name="${esc(dr.search.trim())}">＋ Add "${esc(dr.search.trim())}"</button>` : ''}
+          ${q && !PB.playerNamed(d, dr.search) ? `<button class="chip" data-action="quick-add-player" data-name="${esc(dr.search.trim())}">＋ Add "${esc(dr.search.trim())}"</button>` : ''}
         </div>
 
         <h2>Guests <span class="pill">${dr.guests.length}</span></h2>
@@ -391,9 +410,17 @@
     const d = state.data;
     if (state.busy) return;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dr.date)) return toast('Pick a date', true);
+    const guestKeys = new Set();
     for (const g of dr.guests) {
       if (!g.name.trim()) return toast('Every guest needs a name', true);
       if (!g.pays) return toast(`Who pays for ${g.name}?`, true);
+      if (g.pays === 'Reclub') continue;
+      // Bills are kept by name, so a guest can't share one with a player or another guest.
+      const key = PB.nameKey(g.name);
+      const clash = dr.keptGuests.has(key) ? null : PB.playerNamed(d, g.name);
+      if (clash) return toast(`${clash.name} is already a player. Tick them above, or add an initial for the guest (e.g. "${clash.name} G").`, true);
+      if (guestKeys.has(key)) return toast(`Two guests called ${g.name.trim()}. Add an initial to tell them apart.`, true);
+      guestKeys.add(key);
     }
     const hours = Object.values(dr.bookings).reduce((s, b) => s + (Number(b.hours) || 0), 0);
     const heads = dr.players.length + dr.guests.length;
@@ -453,11 +480,12 @@
         i.kind === 'booking' ? `booked ${i.hours}h (+${money(i.amount)})`
           : i.kind === 'guest' ? `guest ${esc(i.who)} ${money(i.amount)}` : money(i.amount)}</li>`).join('')}</ul></details>`;
 
-    const playerCards = st.players.map((p) => `
-      <div class="card">
+    const guestNote = (entry) => entry.guests.map((g) => `${esc(g.name)} ${money(g.amount)}`).join(', ');
+    const playerCard = (p) => `
+      <div class="card" data-card="${esc(p.name)}">
         <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title">${esc(p.name)}</div>
-            <div class="sub">${p.items.length} session${p.items.length === 1 ? '' : 's'}${p.guestCount ? ` · incl. ${p.guestCount} guest${p.guestCount > 1 ? 's' : ''}` : ''}</div></div>
+          <div class="grow"><div class="title">${esc(p.name)}${p.isGuest ? ' <span class="pill">guest</span>' : ''}</div>
+            <div class="sub">${p.games} game${p.games === 1 ? '' : 's'}${p.guests.length ? ` · incl. ${guestNote(p)}` : ''}</div></div>
           <div class="amount">${money(p.total)}</div>
         </div>
         ${itemList(p.items)}
@@ -465,13 +493,15 @@
           ${paidPill(p, p.total)}
           <button class="btn ghost" data-action="send-player" data-person="${esc(p.name)}">Send bill</button>
         </div>
-      </div>`).join('');
+      </div>`;
+    const regularCards = st.players.filter((p) => !p.isGuest).map(playerCard).join('');
+    const guestCards = st.players.filter((p) => p.isGuest).map(playerCard).join('');
 
     const memberCards = st.members.map((m) => `
-      <div class="card">
+      <div class="card" data-card="${esc(m.name)}">
         <div class="row" style="padding:0;border:0">
           <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
-            <div class="sub">booked ${money(m.credits)} − own fees ${money(m.charges)}</div></div>
+            <div class="sub">booked ${money(m.credits)} − court fees ${money(m.charges)}${m.guests.length ? ` (incl. ${guestNote(m)})` : ''}</div></div>
           <div class="amount ${m.payback < 0 ? 'neg' : ''}">${m.payback < 0 ? 'owes ' + money(-m.payback) : money(m.payback)}</div>
         </div>
         ${itemList(m.items)}
@@ -486,6 +516,32 @@
       ? `<div class="warn-box"><b>Check before sending</b><ul>${st.warnings.map((w) => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : '';
 
     const paidCount = st.players.filter((p) => p.paid).length;
+
+    // The month at a glance: one line per person, like the old Monthly Bill tab.
+    const isOpen = (key) => store.get(`jpb.open.${key}`) !== '0';
+    const glanceRow = (name, note, amount, paid, neg = false) => `
+      <button class="glance-row" data-action="jump-card" data-person="${esc(name)}">
+        <span class="name">${esc(name)}${note ? `<span class="note">${note}</span>` : ''}</span>
+        ${paid ? '<span class="tick">✓ paid</span>' : ''}
+        <span class="amount ${neg ? 'neg' : ''}">${amount}</span>
+      </button>`;
+    const playersGlance = st.players.length ? `
+      <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
+        <summary><span class="grow">Players <span class="count">· ${paidCount}/${st.players.length} paid</span></span>
+          <span class="amount">${money(st.totals.players)}</span></summary>
+        ${st.players.map((p) => glanceRow(p.name,
+          [p.isGuest ? 'guest' : '', p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : ''].filter(Boolean).join(' · '),
+          money(p.total), p.paid)).join('')}
+        <div class="glance-row total"><span class="name">Total to collect</span><span class="amount">${money(st.totals.players)}</span></div>
+      </details>` : '';
+    const membersGlance = st.members.length ? `
+      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
+        <summary><span class="grow">Members <span class="count">· payback from ${esc(s.pay_to || 'Tommy')}</span></span>
+          <span class="amount">${money(st.totals.payback)}</span></summary>
+        ${st.members.map((m) => glanceRow(m.name, `booked ${money(m.credits)} − fees ${money(m.charges)}`,
+          m.payback < 0 ? `owes ${money(-m.payback)}` : money(m.payback), m.paid, m.payback < 0)).join('')}
+        <div class="glance-row total"><span class="name">Total payback</span><span class="amount">${money(st.totals.payback)}</span></div>
+      </details>` : '';
 
     return `
       <div class="month-nav">
@@ -504,9 +560,13 @@
         <div class="stat"><div class="label">Players paid</div><div class="value">${paidCount}/${st.players.length}</div></div>
       </div>` : ''}
 
-      ${st.players.length ? `<h2>Players</h2>${playerCards}
-        <button class="btn secondary block" data-action="send-group">Share summary with the group</button>` : ''}
-      ${st.members.length ? `<h2>Members — payback from ${esc(s.pay_to || 'Tommy')}</h2>${memberCards}` : ''}
+      ${playersGlance}
+      ${membersGlance}
+      ${st.sessions.length ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
+
+      ${regularCards ? `<h2>Regulars — details</h2>${regularCards}` : ''}
+      ${guestCards ? `<h2>Guests paying their own way — details</h2>${guestCards}` : ''}
+      ${st.members.length ? `<h2>Members — details</h2>${memberCards}` : ''}
       ${r ? `<h2>Reclub</h2>
         <div class="card">
           <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub players × ${money(d.settings.reclub_fee)}</div><div class="amount">${money(r.income)}</div></div>
@@ -619,10 +679,38 @@
         <input type="tel" name="phone" value="${esc(p.phone)}" placeholder="+852 9123 4567" /></label>
       <label class="field"><span>Notes</span><input type="text" name="notes" value="${esc(p.notes)}" /></label>
       ${name ? '<p class="small muted">Renaming updates every past session too.</p>' : ''}`,
-    (fd) => save('savePlayer', {
-      originalName: name || fd.name, name: fd.name.trim(), role: fd.role,
-      active: fd.active === 'true', phone: fd.phone, notes: fd.notes,
-    }, 'Player saved'));
+    (fd) => {
+      const newName = fd.name.trim();
+      const clash = PB.playerNamed(state.data, newName, name);
+      if (clash) { toast(nameTakenMessage(clash.name, newName), true); return false; }
+      return save('savePlayer', {
+        originalName: name || newName, name: newName, role: fd.role, isNew: !name,
+        active: fd.active === 'true', phone: fd.phone, notes: fd.notes,
+      }, 'Player saved');
+    });
+  }
+
+  const nameTakenMessage = (existing) =>
+    `There's already a ${existing}. Add a last initial so bills don't get mixed up, e.g. "${existing} G".`;
+
+  // A guest who keeps coming becomes a regular. Their past visits follow them
+  // (renamed too, if the name is changed here).
+  function promoteGuest(guestName) {
+    const g = PB.knownGuests(state.data).find((x) => x.name === guestName);
+    if (!g) return;
+    openForm(`Make ${guestName} a regular`, `
+      <label class="field"><span>Name (change it if another player has the same one)</span>
+        <input type="text" name="name" value="${esc(guestName)}" required /></label>
+      <label class="field"><span>WhatsApp number with country code (optional)</span>
+        <input type="tel" name="phone" placeholder="+852 9123 4567" /></label>
+      <p class="small muted">Past months stay as they were billed. From now on ${esc(guestName)} is ticked like any other player and gets their own bill${g.pays !== g.name ? ` — not ${esc(g.pays)}'s` : ''}.</p>`,
+    (fd) => {
+      const newName = fd.name.trim();
+      const clash = PB.playerNamed(state.data, newName);
+      if (clash) { toast(nameTakenMessage(clash.name, newName), true); return false; }
+      return save('savePlayer', { originalName: guestName, name: newName, role: 'player', active: true, phone: fd.phone, isNew: true },
+        `${newName} is now a regular`);
+    });
   }
 
   function addMembership() {
@@ -699,9 +787,17 @@
         updateSheetFooter();
         break;
       }
+      case 'promote-guest': promoteGuest(t.dataset.name); break;
+      case 'skip-regular': {
+        let skipped = [];
+        try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
+        store.set(LS.notRegular, JSON.stringify(skipped.concat(t.dataset.name)));
+        render();
+        break;
+      }
       case 'quick-add-player': {
         const name = t.dataset.name;
-        if (await save('savePlayer', { name, role: 'player', active: true }, `${name} added`)) {
+        if (await save('savePlayer', { name, role: 'player', active: true, isNew: true }, `${name} added`)) {
           dr.players.push(name); dr.search = ''; renderSheet();
         }
         break;
@@ -736,6 +832,15 @@
         sendText(text, p && p.phone);
         break;
       }
+      case 'jump-card': {
+        const card = [...document.querySelectorAll('#view .card[data-card]')].find((c) => c.dataset.card === t.dataset.person);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('flash');
+          setTimeout(() => card.classList.remove('flash'), 1500);
+        }
+        break;
+      }
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(); break;
@@ -764,6 +869,12 @@
       default: break;
     }
   });
+
+  // Remember which glance tables are folded away (the toggle event doesn't bubble).
+  document.addEventListener('toggle', (ev) => {
+    const key = ev.target && ev.target.dataset ? ev.target.dataset.glance : '';
+    if (key) store.set(`jpb.open.${key}`, ev.target.open ? '1' : '0');
+  }, true);
 
   document.addEventListener('input', (ev) => {
     const dr = state.draft;

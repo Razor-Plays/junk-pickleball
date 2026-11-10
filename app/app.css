@@ -17,24 +17,8 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111513;
-    --card: #1a201c;
-    --ink: #e8ede9;
-    --muted: #9aa7a0;
-    --line: #2c3530;
-    --brand: #3fae76;
-    --brand-ink: #0c1410;
-    --brand-soft: #1d3327;
-    --warn-bg: #3a2f12;
-    --warn-ink: #f2d27a;
-    --bad: #f2867d;
-    --good: #5fcf94;
-    --shadow: none;
-    color-scheme: dark;
-  }
-}
+/* Light only, on purpose: the app keeps its green-and-white look even when
+   the phone is in dark mode. */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -109,6 +93,7 @@ a.btn { display: inline-block; text-decoration: none; }
 .btn.ghost { background: transparent; color: var(--brand); padding: 8px 10px; }
 .btn.danger { background: transparent; color: var(--bad); }
 .btn.block { width: 100%; }
+.btn.compact { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -200,3 +185,28 @@ details.items ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
   border: 0; border-radius: 999px; padding: 14px 20px; font-weight: 700; font-size: 16px;
   background: var(--brand); color: var(--brand-ink); box-shadow: 0 4px 14px rgba(0,0,0,.2); cursor: pointer;
 }
+
+/* month at a glance */
+details.glance {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden;
+}
+details.glance > summary {
+  display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer;
+  font-weight: 700; list-style: none;
+}
+details.glance > summary::-webkit-details-marker { display: none; }
+details.glance > summary::before { content: '▸'; color: var(--muted); font-size: 13px; width: 12px; }
+details.glance[open] > summary::before { content: '▾'; }
+details.glance > summary .grow { flex: 1; }
+details.glance > summary .count { font-weight: 400; color: var(--muted); font-size: 13px; }
+.glance-row {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 7px 14px;
+  border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer;
+}
+.glance-row:active { background: var(--brand-soft); }
+.glance-row .name { flex: 1; min-width: 0; }
+.glance-row .note { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.glance-row .tick { color: var(--good); font-size: 13px; font-weight: 700; }
+.glance-row.total { font-weight: 700; cursor: default; background: var(--bg); }
+.card.flash { outline: 2px solid var(--brand); }
