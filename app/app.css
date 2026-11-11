@@ -359,3 +359,22 @@ details.glance > summary .count { font-weight: 400; color: var(--muted); font-si
   .tabbar { left: 50%; right: auto; transform: translateX(-50%); width: 720px; }
   .fab { right: calc(50% - 344px); }
 }
+
+/* ---------- where we play ---------- */
+.place { display: flex; align-items: center; gap: 4px; }
+.place svg { flex: none; width: 13px; height: 13px; color: var(--accent); }
+.place.big { margin: 4px 2px 12px; font-weight: 700; }
+.place.big svg { width: 18px; height: 18px; }
+textarea { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.row > svg { flex: none; width: 18px; height: 18px; color: var(--muted); }
+
+/* ---------- player page ---------- */
+.facts { display: grid; gap: 4px; font-size: 14px; }
+/* games per month: one series, one colour, thin columns */
+.spark { display: flex; align-items: flex-end; gap: 4px; height: 118px; padding-top: 4px; }
+.spark .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; }
+.spark i { display: block; width: 100%; max-width: 22px; min-height: 2px; border-radius: 4px 4px 0 0; background: #0E8AA6; }
+:root[data-theme="dark"] .spark i { background: #13A5C5; }
+.spark .n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 13px; }
+.spark .m { font-size: 11px; color: var(--muted); }
+.tick.small { color: var(--good); font-size: 12px; font-weight: 700; }

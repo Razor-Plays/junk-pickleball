@@ -20,7 +20,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 4;
+const API_VERSION = 5;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -30,7 +30,7 @@ const FAILURE_WINDOW_SECONDS = 600; // ... within this rolling window
 
 const TABS = {
   Players: ['name', 'role', 'active', 'phone', 'notes'],
-  Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at'],
+  Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours'],
   Bookings: ['session_id', 'member', 'hours', 'rate'],
   Attendance: ['session_id', 'name', 'guest', 'pays'],
   Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes'],
@@ -49,6 +49,7 @@ const DEFAULT_SETTINGS = {
   currency: '$',
   pay_to: 'Tommy',
   public_stats: 'TRUE',
+  locations: 'Metro City Plaza Phase 3 | D-Park, Tsuen Wan | Tin Hau | Wong Chuk Hang',
 };
 
 function ss_() {
@@ -214,6 +215,8 @@ const ACTIONS = {
       reclub_fee: s.reclub_fee === undefined || s.reclub_fee === '' ? Number(readSettings_().reclub_fee || 100) : Number(s.reclub_fee),
       notes: s.notes || '',
       updated_at: new Date().toISOString(),
+      location: String(s.location || '').trim(),
+      play_hours: Number(s.play_hours) > 0 ? Number(s.play_hours) : '',
     };
     upsertBy_('Sessions', 'id', id, row);
     replaceChildren_('Bookings', id, (p.bookings || []).filter(function (b) { return Number(b.hours) > 0; })
@@ -339,7 +342,7 @@ function memberView_(data) {
     loaded_at: data.loaded_at,
     settings: { club_name: data.settings.club_name, currency: data.settings.currency, pay_to: data.settings.pay_to },
     players: data.players.map(function (p) { return { name: p.name, role: p.role, active: p.active }; }),
-    sessions: data.sessions.map(function (s) { return { id: s.id, date: s.date }; }),
+    sessions: data.sessions.map(function (s) { return { id: s.id, date: s.date, location: s.location, play_hours: s.play_hours }; }),
     bookings: Object.keys(courts).map(function (id) {
       const c = courts[id];
       return { session_id: id, member: 'Courts', hours: c.hours, rate: c.hours ? c.cost / c.hours : 0 };
@@ -361,6 +364,11 @@ function readSettings_() {
 function sheet_(name) {
   const sh = ss_().getSheetByName(name);
   if (!sh) throw new Error('Missing tab "' + name + '" — run setup()');
+  // A tab made before a column was added gets the new columns and headings on first use.
+  const headers = TABS[name];
+  if (sh.getMaxColumns() < headers.length) sh.insertColumnsAfter(sh.getMaxColumns(), headers.length - sh.getMaxColumns());
+  const top = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  if (top[0] !== '' && top[headers.length - 1] === '') sh.getRange(1, 1, 1, headers.length).setValues([headers]);
   return sh;
 }
 

@@ -69,6 +69,7 @@
     sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>',
     bell: '<svg class="bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none"/></svg>',
     chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.5-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.5 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>',
   };
 
@@ -259,8 +260,8 @@
       const sum = PB.sessionSummary(d, s, idx);
       const who = sum.bookings.map((b) => `${b.member}${b.hours !== 1 ? ' ×' + b.hours : ''}`).join(', ');
       const sub = sum.heads
-        ? `${sum.heads} players · ${money(sum.cpp)} each · ${sum.hours}h`
-        : `${sum.hours}h booked${who ? ' · ' + who : ''}`;
+        ? `${sum.heads} players · ${money(sum.cpp)} each · ${PB.courtLabel(sum)}`
+        : `${PB.courtLabel(sum)}${who ? ' · ' + who : ''}`;
       const label = PB.dayLabel(s.date, true);
       return `
         <button class="session" data-action="edit-session" data-id="${esc(s.id)}">
@@ -268,6 +269,7 @@
           <div class="grow">
             <div class="title">${esc(label)}</div>
             <div class="sub">${esc(sub)}</div>
+            ${s.location ? `<div class="sub place">${ICON.pin}${esc(s.location)}</div>` : ''}
           </div>
           ${sum.heads ? '' : `<span class="pill todo">${d.role === 'member' ? 'Booked' : 'To fill ›'}</span>`}
         </button>`;
@@ -315,8 +317,9 @@
     el.innerHTML = `
       <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(PB.dayLabel(s.date, true))}</h3></div>
       <div class="sheet-body">
+        ${s.location ? `<p class="place big">${ICON.pin}${esc(s.location)}</p>` : ''}
         <div class="stats">
-          <div class="stat"><div class="label">Court time</div><div class="value">${sum.hours}h</div></div>
+          <div class="stat"><div class="label">Courts</div><div class="value">${esc(PB.courtLabel(sum))}</div></div>
           <div class="stat"><div class="label">Court cost</div><div class="value">${money(sum.cost)}</div></div>
           <div class="stat"><div class="label">Players</div><div class="value">${sum.heads || '—'}</div></div>
           <div class="stat"><div class="label">Each</div><div class="value">${sum.heads ? money(sum.cpp) : '—'}</div></div>
@@ -345,6 +348,7 @@
       const isGuestRow = (a) => a.guest && !(a.pays === a.name && PB.playerNamed(d, a.name));
       draft = {
         id, isNew: false, date: s.date, notes: s.notes, reclub_fee: s.reclub_fee,
+        location: s.location || '', play_hours: s.play_hours || 2,
         baseUpdatedAt: s.updated_at || '',
         bookings,
         // A past guest who has since become a regular (and paid their own way)
@@ -362,6 +366,9 @@
         // The id is fixed now, so tapping Save twice (or retrying after a
         // dropped connection) updates the same session instead of adding a copy.
         id: PB.newSessionId(date), isNew: true, date, notes: '', reclub_fee: d.settings.reclub_fee,
+        // start from where we played last time; otherwise the first place on the list
+        location: ([...d.sessions].sort((a, b) => b.date.localeCompare(a.date)).find((x) => x.location) || {}).location || PB.locations(d)[0] || '',
+        play_hours: 2,
         bookings: {}, players: [], guests: [], keptGuests: new Set(), search: '',
       };
     }
@@ -379,7 +386,8 @@
     const cost = PB.round2(Object.values(dr.bookings).reduce((s, b) => s + (Number(b.hours) || 0) * (Number(b.rate) || 0), 0));
     const heads = dr.players.length + dr.guests.length;
     const cpp = heads ? PB.round2(cost / heads) : 0;
-    return { hours, cost, heads, cpp };
+    const label = PB.courtLabel({ hours, session: { play_hours: Number(dr.play_hours) || 2 } });
+    return { hours, cost, heads, cpp, label };
   }
 
   function renderSheet() {
@@ -427,8 +435,18 @@
         <label class="field"><span>Date</span>
           <input type="date" id="dDate" value="${esc(dr.date)}" />
         </label>
+        <label class="field"><span>Where</span>
+          <select id="dLocation">
+            ${[...new Set([...PB.locations(d), dr.location].filter(Boolean))].map((l) => `<option${l === dr.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+            <option value=""${dr.location ? '' : ' selected'}>Not set</option>
+          </select>
+        </label>
+        <label class="field"><span>How long we play</span>
+          <select id="dLength">${[1, 1.5, 2, 2.5, 3].map((h) => `<option value="${h}"${Number(dr.play_hours) === h ? ' selected' : ''}>${h} hour${h === 1 ? '' : 's'}</option>`).join('')}</select>
+        </label>
 
         <h2>Courts booked</h2>
+        <p class="small muted" style="margin:-4px 2px 8px">Hours taken from each membership. Two courts for 2 hours is 4 hours in total.</p>
         <div class="list">
           ${dr.members.map((m) => {
             const b = dr.bookings[m];
@@ -475,7 +493,7 @@
       </div>
       <div class="sheet-foot"><div class="inner">
         <div class="summary"><b>${sum.heads} players · ${money(sum.cpp)} each</b><br>
-          <span class="muted">${sum.hours}h · court ${money(sum.cost)}</span></div>
+          <span class="muted">${sum.label} · ${money(sum.cost)}</span></div>
         <button class="btn" data-action="save-session">Save</button>
       </div></div>`;
     el.hidden = false;
@@ -486,7 +504,7 @@
   function updateSheetFooter() {
     const sum = draftSummary();
     const s = $('#sheet .summary');
-    if (s) s.innerHTML = `<b>${sum.heads} players · ${money(sum.cpp)} each</b><br><span class="muted">${sum.hours}h · court ${money(sum.cost)}</span>`;
+    if (s) s.innerHTML = `<b>${sum.heads} players · ${money(sum.cpp)} each</b><br><span class="muted">${sum.label} · ${money(sum.cost)}</span>`;
   }
 
   async function saveDraft() {
@@ -516,7 +534,7 @@
     const id = dr.id;
     const payload = {
       ...(dr.isNew ? {} : { base_updated_at: dr.baseUpdatedAt }),
-      session: { id, date: dr.date, reclub_fee: dr.reclub_fee, notes: dr.notes },
+      session: { id, date: dr.date, reclub_fee: dr.reclub_fee, notes: dr.notes, location: dr.location, play_hours: Number(dr.play_hours) || 2 },
       bookings: Object.entries(dr.bookings)
         .filter(([, b]) => Number(b.hours) > 0)
         .map(([member, b]) => ({ member, hours: Number(b.hours), rate: Number(b.rate) })),
@@ -580,6 +598,7 @@
         <div class="btn-row" style="margin-top:8px">
           ${paidPill(p, p.total)}
           ${ro ? '' : `<button class="btn ghost" data-action="send-player" data-person="${esc(p.name)}">Send bill</button>`}
+          <button class="btn ghost" data-action="open-player" data-name="${esc(p.name)}">History</button>
         </div>
       </div>`;
     const regularCards = st.players.filter((p) => !p.isGuest).map(playerCard).join('');
@@ -674,7 +693,7 @@
       ${memberCards ? `<h2>Members — details</h2>${memberCards}` : ''}
       ${r && ro ? `<h2>Reclub</h2>
         <div class="card">
-          <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub player${r.heads === 1 ? '' : 's'}<div class="sub">Same court fee as everyone else</div></div><div class="amount">${money(r.courtShare)}</div></div>
+          <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub player${r.heads === 1 ? '' : 's'}</div><div class="amount">${money(r.courtShare)}</div></div>
         </div>` : ''}
       ${r && !ro ? `<h2>Reclub</h2>
         <div class="card">
@@ -692,9 +711,9 @@
     if (d.role === 'member') {
       const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
       return `
-        <div class="card"><b>Member view</b><div class="small muted">You can see sessions, who played and the bills. Changes are made by the people who run the club.</div></div>
+        <div class="card"><b>🥒 Good to see you!</b><div class="small muted">Friends, a plastic ball with holes in it, and the occasional dodgy line call. Tap your name to see your games and fees.</div></div>
         <h2>Players <span class="pill">${names.length}</span></h2>
-        <div class="list">${names.map((p) => `<div class="row"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div></div>`).join('')}</div>
+        <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
         <h2>More</h2>
         <div class="card"><a class="btn secondary" href="../" target="_blank" rel="noopener">Open stats page</a></div>
         <p class="small muted center">Loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
@@ -730,9 +749,10 @@
       <h2>Players</h2>
       <div class="list">
         ${players.map((p) => `
-          <button class="row" data-action="edit-player" data-name="${esc(p.name)}">
+          <button class="row" data-action="open-player" data-name="${esc(p.name)}">
             <div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div>
               <div class="sub">${p.active ? 'active' : 'inactive'}${p.phone ? ' · ' + esc(p.phone) : ''}</div></div>
+            ${ICON.chevron}
           </button>`).join('')}
       </div>
       <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>
@@ -744,6 +764,8 @@
         <label class="field"><span>Reclub fee per player (new sessions)</span><input type="number" inputmode="decimal" id="sReclub" value="${esc(d.settings.reclub_fee)}" /></label>
         <label class="field"><span>Who collects money</span><input type="text" id="sPayTo" value="${esc(d.settings.pay_to)}" /></label>
         <label class="field"><span>Currency symbol</span><input type="text" id="sCur" value="${esc(d.settings.currency)}" /></label>
+        <label class="field"><span>Places we play (one per line, most used first)</span>
+          <textarea id="sPlaces" rows="4">${esc(PB.locations(d).join('\n'))}</textarea></label>
         <label class="field"><span>Public stats page (first names and dates played only — no money)</span><select id="sStats">
           <option value="TRUE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? ' selected' : ''}>On — anyone with the link can see it</option>
           <option value="FALSE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? '' : ' selected'}>Off</option></select></label>
@@ -784,6 +806,68 @@
     el.innerHTML = '';
     document.body.style.overflow = '';
     render();
+  }
+
+  // One person's page: headline numbers, games per month, and every month's bill.
+  function openPlayer(name) {
+    const d = state.data;
+    const h = PB.playerHistory(d, name);
+    const admin = d.role !== 'member';
+    const el = $('#sheet');
+    if (!h.months.length) {
+      if (admin && h.player) { editPlayer(name); return; }
+      toast(`${name} hasn't played yet`);
+      return;
+    }
+    const monthName = (m) => PB.monthLabel(m).split(' ')[0];
+    // last 12 months, oldest first, including the quiet ones
+    const end = h.months[0].month;
+    const span = Array.from({ length: 12 }, (_, i) => PB.shiftMonth(end, i - 11));
+    const byMonth = new Map(h.months.map((m) => [m.month, m]));
+    const peak = Math.max(1, ...span.map((m) => (byMonth.get(m) || { games: 0 }).games));
+    const share = h.totalSessions ? Math.round((h.games / h.totalSessions) * 100) : 0;
+    const facts = [
+      h.totalSessions ? `Played ${h.games} of the ${h.totalSessions} sessions since joining (${share}%)` : '',
+      h.favouriteDay ? `Usually a ${({ Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' })[h.favouriteDay]} player` : '',
+      h.busiestMonth && h.busiestMonth.games > 1 ? `Busiest month: ${PB.monthLabel(h.busiestMonth.month)} (${h.busiestMonth.games} games)` : '',
+      h.favouritePlace ? `Most often at ${esc(h.favouritePlace)}` : '',
+    ].filter(Boolean);
+    const line = (i) => `<div class="glance-row" style="cursor:default"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
+      i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
+      <span class="amount${i.kind === 'hosted' ? ' muted' : ''}">${money(i.amount)}</span></div>`;
+    el.innerHTML = `
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(name)}</h3>
+        ${admin && h.player ? `<button class="btn ghost" data-action="edit-player" data-name="${esc(name)}">Edit</button>` : ''}</div>
+      <div class="sheet-body">
+        <div class="stats">
+          <div class="stat"><div class="label">Games played</div><div class="value">${h.games}</div></div>
+          <div class="stat"><div class="label">First game</div><div class="value">${h.first ? esc(PB.dayLabel(h.first, true).slice(4)) : '—'}</div></div>
+          <div class="stat"><div class="label">Court fees, all time</div><div class="value">${money(h.fees)}</div></div>
+          <div class="stat"><div class="label">Average per game</div><div class="value">${h.games ? money(h.perGame) : '—'}</div></div>
+        </div>
+        ${facts.length ? `<div class="card facts">${facts.map((f) => `<div>${f}</div>`).join('')}</div>` : ''}
+
+        <h2>Games per month</h2>
+        <div class="card">
+          <div class="spark" role="img" aria-label="Games played in each of the last 12 months">
+            ${span.map((m) => { const g = (byMonth.get(m) || { games: 0 }).games; return `<div class="col" title="${esc(PB.monthLabel(m))}: ${g} game${g === 1 ? '' : 's'}"><span class="n">${g || ''}</span><i style="height:${Math.round((g / peak) * 100)}%"></i><span class="m">${esc(monthName(m).slice(0, 1))}</span></div>`; }).join('')}
+          </div>
+          <div class="small muted center">${esc(PB.monthLabel(span[0]))} to ${esc(PB.monthLabel(end))}</div>
+        </div>
+
+        ${h.years.map((y) => `
+          <h2>${y.year} <span class="pill">${y.games} game${y.games === 1 ? '' : 's'} · ${money(y.fees)}</span></h2>
+          ${y.months.map((m) => `
+            <details class="glance">
+              <summary><span class="chev" aria-hidden="true"></span><span class="grow">${esc(monthName(m.month))} <span class="count">· ${m.games} game${m.games === 1 ? '' : 's'}</span></span>
+                ${m.paid ? '<span class="tick small">✓ paid</span>' : ''}<span class="amount">${money(m.fees)}</span></summary>
+              ${m.items.map(line).join('')}
+            </details>`).join('')}`).join('')}
+        ${h.isMember ? '<p class="small muted center">Court fees for a member come off their booking, so there is nothing to pay.</p>' : ''}
+      </div>`;
+    el.hidden = false;
+    el.scrollTop = 0;
+    document.body.style.overflow = 'hidden';
   }
 
   function editPlayer(name) {
@@ -970,6 +1054,7 @@
       }
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
+      case 'open-player': openPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(); break;
       case 'share-member-invite': {
         const link = inviteLink(String(state.data.settings.member_code));
@@ -993,6 +1078,7 @@
           club_name: $('#sClub').value.trim(), default_rate: $('#sRate').value, reclub_fee: $('#sReclub').value,
           pay_to: $('#sPayTo').value.trim(), currency: $('#sCur').value.trim() || '$',
           public_stats: $('#sStats').value,
+          locations: $('#sPlaces').value.split('\n').map((x) => x.trim()).filter(Boolean).join(' | '),
         }, 'Settings saved').then(render);
         break;
       case 'sign-out':
@@ -1038,6 +1124,11 @@
     const el = ev.target;
     if (el.id === 'dDate') {
       dr.date = el.value;
+    } else if (el.id === 'dLocation') {
+      dr.location = el.value;
+    } else if (el.id === 'dLength') {
+      dr.play_hours = Number(el.value);
+      updateSheetFooter();
     } else if (el.dataset.guestName !== undefined) {
       // A returning guest: fill in who paid for them last time.
       const g = dr.guests[Number(el.dataset.guestName)];

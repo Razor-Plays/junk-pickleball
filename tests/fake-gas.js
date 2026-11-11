@@ -6,7 +6,7 @@ const path = require('path');
 const vm = require('vm');
 
 function makeSheet(name) {
-  const sh = { name, rows: [], maxRows: 1000 };
+  const sh = { name, rows: [], maxRows: 1000, maxCols: 5 };
   const ensure = (r) => { while (sh.rows.length < r) sh.rows.push([]); };
   sh.api = {
     getRange(r, c, nr = 1, nc = 1) {
@@ -46,6 +46,8 @@ function makeSheet(name) {
       return 0;
     },
     getMaxRows: () => sh.maxRows,
+    getMaxColumns: () => sh.maxCols,
+    insertColumnsAfter(_, n) { sh.maxCols += n; },
     insertRowsAfter(_, n) { sh.maxRows += n; },
     setFrozenRows() {},
   };
