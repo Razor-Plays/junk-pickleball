@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440" preserveAspectRatio="none">
+  <defs>
+    <!-- roughens the edges so the bands read as dry brush strokes -->
+    <filter id="brush" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.11" numOctaves="3" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="26" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+  <g fill="none" stroke-linecap="butt" filter="url(#brush)">
+    <!-- top left -->
+    <g transform="rotate(-24 120 60)">
+      <path d="M-120 22 H300" stroke="#FF6729" stroke-width="46"/>
+      <path d="M-120 78 H210" stroke="#092D4A" stroke-width="30"/>
+      <path d="M-120 118 H130" stroke="#13A5C5" stroke-width="16" opacity=".85"/>
+      <path d="M-60 -22 H250" stroke="#FFC83D" stroke-width="10" opacity=".9"/>
+    </g>
+    <!-- top right -->
+    <g transform="rotate(-24 700 50)">
+      <path d="M560 -8 H960" stroke="#092D4A" stroke-width="40"/>
+      <path d="M610 42 H960" stroke="#13A5C5" stroke-width="22" opacity=".85"/>
+      <path d="M650 84 H960" stroke="#FF6729" stroke-width="26"/>
+    </g>
+    <!-- bottom left -->
+    <g transform="rotate(-24 90 400)">
+      <path d="M-140 372 H170" stroke="#13A5C5" stroke-width="24" opacity=".85"/>
+      <path d="M-140 416 H250" stroke="#092D4A" stroke-width="34"/>
+      <path d="M-140 462 H330" stroke="#FF6729" stroke-width="30"/>
+    </g>
+    <!-- bottom right -->
+    <g transform="rotate(-24 720 400)">
+      <path d="M590 380 H960" stroke="#FF6729" stroke-width="40"/>
+      <path d="M640 430 H960" stroke="#092D4A" stroke-width="26"/>
+      <path d="M560 338 H960" stroke="#FFC83D" stroke-width="9" opacity=".9"/>
+    </g>
+  </g>
+</svg>

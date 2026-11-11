@@ -62,6 +62,16 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  // ------------------------------------------------------------ icons
+
+  const ICON = {
+    moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>',
+    bell: '<svg class="bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>',
+  };
+
   // ------------------------------------------------------------ day / night
 
   function applyTheme(theme) {
@@ -71,10 +81,10 @@
     const scheme = document.querySelector('meta[name="color-scheme"]');
     if (scheme) scheme.content = dark ? 'dark' : 'light';
     const bar = document.querySelector('meta[name="theme-color"]');
-    if (bar) bar.content = dark ? '#14532f' : '#1f7a4d';
+    if (bar) bar.content = dark ? '#06243B' : '#092D4A';
     const btn = document.querySelector('[data-action="toggle-theme"]');
     if (btn) {
-      btn.textContent = dark ? '☀️' : '🌙';
+      btn.innerHTML = dark ? ICON.sun : ICON.moon;
       btn.setAttribute('aria-label', dark ? 'Switch to day mode' : 'Switch to night mode');
       btn.title = btn.getAttribute('aria-label');
     }
@@ -186,10 +196,23 @@
 
   // ------------------------------------------------------------ render root
 
+  // The big logo shows on the home (Sessions) screen only. While any of it is
+  // still on screen the top bar is see-through; after that the bar turns solid.
+  function syncHero() {
+    const shown = document.body.classList.contains('show-hero');
+    const over = shown && $('#hero').getBoundingClientRect().bottom > $('#topbar').offsetHeight + 6;
+    document.body.classList.toggle('over-hero', over);
+  }
+  window.addEventListener('scroll', syncHero, { passive: true });
+  window.addEventListener('resize', syncHero);
+
   function render() {
     document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
     const view = $('#view');
-    if (!state.apiUrl || !state.code) {
+    const signedIn = state.apiUrl && state.code;
+    document.body.classList.toggle('show-hero', !signedIn || state.tab === 'sessions');
+    syncHero();
+    if (!signedIn) {
       $('#tabbar').hidden = true;
       view.innerHTML = renderSetup();
       return;
@@ -231,19 +254,22 @@
     const past = sessions.filter((s) => s.date <= today);
     const shown = state.showAllSessions ? past : past.slice(0, 15);
 
+    const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const row = (s) => {
       const sum = PB.sessionSummary(d, s, idx);
       const who = sum.bookings.map((b) => `${b.member}${b.hours !== 1 ? ' ×' + b.hours : ''}`).join(', ');
       const sub = sum.heads
         ? `${sum.heads} players · ${money(sum.cpp)} each · ${sum.hours}h`
-        : `${sum.hours}h booked${who ? ' (' + who + ')' : ''} · no players yet`;
+        : `${sum.hours}h booked${who ? ' · ' + who : ''}`;
+      const label = PB.dayLabel(s.date, true);
       return `
-        <button class="row" data-action="edit-session" data-id="${esc(s.id)}">
+        <button class="session" data-action="edit-session" data-id="${esc(s.id)}">
+          <div class="date-block"><span>${esc(label.slice(0, 3).toUpperCase())}</span><b>${Number(s.date.slice(8, 10))}</b><span>${MONTHS[Number(s.date.slice(5, 7)) - 1]}</span></div>
           <div class="grow">
-            <div class="title">${esc(PB.dayLabel(s.date, true))}</div>
+            <div class="title">${esc(label)}</div>
             <div class="sub">${esc(sub)}</div>
           </div>
-          ${sum.heads ? '' : '<span class="pill warn">To fill</span>'}
+          ${sum.heads ? '' : '<span class="pill todo">To fill ›</span>'}
         </button>`;
     };
 
@@ -255,8 +281,9 @@
     const suggestions = PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
     const suggestionCards = suggestions.length ? `
       <h2>Guests who keep coming</h2>
-      <div class="list">${suggestions.map((g) => `
+      <div class="list">${suggestions.map((g, i) => `
         <div class="row">
+          <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
           <div class="grow"><div class="title">${esc(g.name)}</div>
             <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
           <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}">Make a regular</button>
@@ -264,13 +291,13 @@
         </div>`).join('')}</div>` : '';
 
     return `
-      ${low.length ? `<div class="warn-box">Membership hours running low: ${low.map((b) => `<b>${esc(b.name)}</b> ${b.left}h`).join(', ')}</div>` : ''}
-      ${upcoming.length ? `<h2>Coming up</h2><div class="list">${upcoming.map(row).join('')}</div>` : ''}
+      ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Hours running low: ${low.map((b) => `<b>${esc(b.name)} ${b.left}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
+      ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
       ${suggestionCards}
       <h2>Sessions</h2>
-      ${past.length ? `<div class="list">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions yet.</div>'}
+      ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions yet.</div>'}
       ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all sessions</button>' : ''}
-      <button class="fab" data-action="new-session">＋ Session</button>`;
+      <button class="fab" data-action="new-session">${ICON.plus}Session</button>`;
   }
 
   // ------------------------------------------------------------ Session editor
