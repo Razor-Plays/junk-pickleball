@@ -251,8 +251,9 @@
     const idx = PB.index(d);
     const sessions = [...d.sessions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
     const today = todayISO();
-    const upcoming = sessions.filter((s) => s.date > today).reverse();
-    const past = sessions.filter((s) => s.date <= today);
+    // Today's session stays under "Coming up" until the day is over (phone's own date).
+    const upcoming = sessions.filter((s) => s.date >= today).reverse();
+    const past = sessions.filter((s) => s.date < today);
     const shown = state.showAllSessions ? past : past.slice(0, 15);
 
     const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
