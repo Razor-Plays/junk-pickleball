@@ -24,8 +24,12 @@ A named guest who has come three times is suggested as a regular; making them
 one carries their past visits over. Names must be unique (ignoring case), since
 bills are kept by name: a second Neil has to be "Neil G".
 
-The app is green and white by default; the moon button in the top bar
-switches that phone to night mode.
+The look follows the club's colours (navy, orange, ocean blue and ball yellow
+on cream). `app/logo.svg` is the club logo as a vector, `app/ball.svg` is the
+ball on its own for small spaces, and `app/icon-*.png` are the home-screen
+icons. The big logo banner sits at the top of the Sessions screen and scrolls
+away; a slim navy bar takes over once it has gone. Day mode is the default;
+the moon button in the top bar switches that phone to night mode.
 
 Two people can use it at once: if someone else changed a session while you
 had it open, your save is refused with a message instead of overwriting

@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
-  <meta name="theme-color" content="#1f7a4d" />
+  <meta name="theme-color" content="#092D4A" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Pickleball" />
+  <meta name="apple-mobile-web-app-title" content="Junk PB" />
   <title>Junk Pickleball</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="ball.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
   <script>
     // Apply the saved day/night choice before the page paints, so it never flashes.
     try { if (localStorage.getItem('jpb.theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
@@ -18,20 +18,29 @@
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">🥒 <span id="clubName">Junk Pickleball</span></div>
+  <!-- Compact bar. Over the big logo banner it is see-through; once the banner
+       has scrolled away (or on other tabs) it turns solid and shows the name. -->
+  <header class="topbar" id="topbar">
+    <div class="brand"><img class="brand-mark" src="ball.svg" alt="" width="30" height="30" /><span id="clubName">Junk Pickleball</span></div>
     <div class="topbar-actions">
-      <button class="icon-btn" data-action="toggle-theme" aria-label="Switch to night mode" title="Switch to night mode">🌙</button>
-      <button class="icon-btn" data-action="refresh" aria-label="Refresh" title="Refresh">⟳</button>
+      <button class="icon-btn" data-action="toggle-theme" aria-label="Switch to night mode" title="Switch to night mode"></button>
+      <button class="icon-btn" data-action="refresh" aria-label="Refresh" title="Refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg>
+      </button>
     </div>
   </header>
+
+  <div class="hero" id="hero"><img src="logo.svg" alt="Junk Pickleball" /></div>
 
   <main id="view" aria-live="polite"></main>
 
   <nav class="tabbar" id="tabbar">
-    <button data-tab="sessions" class="active"><span>📅</span>Sessions</button>
-    <button data-tab="bills"><span>💸</span>Bills</button>
-    <button data-tab="club"><span>⚙️</span>Club</button>
+    <button data-tab="sessions" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.2h2" /></svg>Sessions</button>
+    <button data-tab="bills">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3h8l4 4v12.5a1.5 1.5 0 0 1-1.5 1.5h-10.5A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M14.5 3v4h4M8.5 12h7M8.5 15.5h7M8.5 8.5h3"/></svg>Bills</button>
+    <button data-tab="club">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.4-3.3 2.9-5.3 6-5.3s5.6 2 6 5.3"/><circle cx="17" cy="9.5" r="2.5"/><path d="M16.8 14.3c2.3.2 3.9 1.9 4.2 4.4"/></svg>Club</button>
   </nav>
 
   <div id="sheet" class="sheet" hidden></div>

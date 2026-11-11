@@ -1,6 +1,6 @@
 (() => {
   const SHEET_ID = '1pe2SvzjhPTlWaRfMWkuXmErbjPWHGIEraELYhZxgAHA';
-  const BUILD_TAG = '2026-11-10.1';
+  const BUILD_TAG = '2026-11-11.1';
   // The manager app's sheet API also serves an attendance-only feed (no money).
   const API_URL = (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || '';
   const CSV_URL = (sheetName) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
@@ -120,12 +120,7 @@
     return { leaders, value: best };
   }
 
-  function gradient(ctx) {
-    const g = ctx.createLinearGradient(0, 0, 0, 280);
-    g.addColorStop(0, 'rgba(34,197,94,0.95)');
-    g.addColorStop(1, 'rgba(134,239,172,0.25)');
-    return g;
-  }
+  const BAR_COLOR = '#0E8AA6';
 
   function destroyCharts() {
     Object.values(state.charts).forEach((ch) => ch?.destroy());
@@ -527,8 +522,16 @@
   function renderCharts(players, sessions) {
     destroyCharts();
 
-    Chart.defaults.color = '#9ca3af';
-    Chart.defaults.borderColor = '#334155';
+    // One series per chart, so every bar wears the same club blue (checked for
+    // contrast on the white card); axes and grid stay quiet.
+    Chart.defaults.color = '#5A6E80';
+    Chart.defaults.borderColor = '#EBDFC9';
+    Chart.defaults.plugins.legend.display = false;
+    Chart.defaults.scales.category.ticks.autoSkip = false;   // name every bar, even on a phone
+    Chart.defaults.font.size = 11;
+    Chart.defaults.datasets.bar.borderWidth = 0;
+    Chart.defaults.datasets.bar.borderRadius = 4;
+    Chart.defaults.datasets.bar.maxBarThickness = 24;
 
     const leaders = [...players].sort((a, b) => b.totalAttended - a.totalAttended).slice(0, 12);
     const fairness = [...players]
@@ -536,7 +539,7 @@
       .sort((a, b) => b.attendanceRate - a.attendanceRate)
       .slice(0, 12);
     const form = [...players].sort((a, b) => b.last10 - a.last10 || b.totalAttended - a.totalAttended).slice(0, 12);
-    const dowCounts = new Map([['Sun', 0], ['Mon', 0], ['Tue', 0], ['Wed', 0], ['Thu', 0], ['Fri', 0], ['Sat', 0]]);
+    const dowCounts = new Map([['Mon', 0], ['Tue', 0], ['Wed', 0], ['Thu', 0], ['Fri', 0], ['Sat', 0], ['Sun', 0]]);
     sessions.forEach((s) => {
       const key = new Date(s.date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
       dowCounts.set(key, (dowCounts.get(key) || 0) + 1);
@@ -554,9 +557,7 @@
         datasets: [{
           label: 'Sessions Attended',
           data: leaders.map((x) => x.totalAttended),
-          backgroundColor: gradient(leadersCtx),
-          borderColor: '#34c77b',
-          borderWidth: 1,
+          backgroundColor: BAR_COLOR,
         }],
       },
       options: {
@@ -574,9 +575,7 @@
         datasets: [{
           label: 'Attendance Rate %',
           data: fairness.map((x) => +(x.attendanceRate * 100).toFixed(1)),
-          backgroundColor: gradient(rateCtx),
-          borderColor: '#34c77b',
-          borderWidth: 1,
+          backgroundColor: BAR_COLOR,
         }],
       },
       options: {
@@ -594,9 +593,7 @@
         datasets: [{
           label: 'Last 10 Sessions',
           data: form.map((x) => x.last10),
-          backgroundColor: '#60a5fa99',
-          borderColor: '#60a5fa',
-          borderWidth: 1,
+          backgroundColor: BAR_COLOR,
         }],
       },
       options: {
@@ -607,20 +604,15 @@
     });
 
     state.charts.dow = new Chart(dowCtx, {
-      type: 'doughnut',
+      type: 'bar',
       data: {
         labels: [...dowCounts.keys()],
-        datasets: [{
-          data: [...dowCounts.values()],
-          backgroundColor: ['#60a5fa', '#34c77b', '#f6c453', '#fb923c', '#818cf8', '#22d3ee', '#f472b6'],
-          borderColor: '#1b2433',
-          borderWidth: 2,
-        }],
+        datasets: [{ label: 'Sessions', data: [...dowCounts.values()], backgroundColor: BAR_COLOR }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
       },
     });
   }
