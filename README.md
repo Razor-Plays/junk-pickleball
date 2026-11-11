@@ -72,7 +72,21 @@ Starting from an empty sheet instead? Run the `setup` function once before
 deploying; it creates the tabs and an access code.
 
 When `Code.gs` changes: paste the new version, then **Deploy → Manage
-deployments → Edit → Version: New version**. The URL stays the same.
+deployments → Edit → Version: New version**. The URL stays the same, so
+nobody has to reinstall or sign in again. (Don't use *New deployment* for an
+update: that makes a different URL.)
+
+### Two codes
+
+| Code (Settings tab) | For | Can do |
+| --- | --- | --- |
+| `access_code` | the people who run the club | everything |
+| `member_code` | regular members | look only: sessions, who played, and bills |
+
+The member code is enforced by the sheet script, not just by hidden buttons:
+every change is refused, and the script never sends a member's phone the
+memberships (hours left), who booked which court, paybacks, the kitty, the
+Reclub fee, phone numbers or notes. **Club → Share** has a link for each code.
 
 ### Security and privacy
 
@@ -101,7 +115,7 @@ formula edit.
 | Memberships | id, member, date, amount, hours, rate, notes |
 | Payments | month (`YYYY-MM`), person, amount, paid_on, note |
 | Kitty | id, date, description, amount (spending is negative) |
-| Settings | key, value (`club_name`, `default_rate`, `reclub_fee`, `currency`, `pay_to`, `public_stats`, `access_code`) |
+| Settings | key, value (`club_name`, `default_rate`, `reclub_fee`, `currency`, `pay_to`, `public_stats`, `access_code`, `member_code`) |
 
 ## Development
 

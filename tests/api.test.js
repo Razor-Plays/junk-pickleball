@@ -163,3 +163,62 @@ test('a guest becomes a regular: history follows them, even under a new name', (
   // stats: the new regular is named, the remaining guest is not
   assert.deepEqual(gas.get({ view: 'stats' }).rows.map((r) => r.player_name), ['Cat', 'Guest 1', 'Clyde W']);
 });
+
+test('member code: read-only, and nothing private ever leaves the sheet', () => {
+  const { gas, call } = fresh();
+  call('savePlayer', { name: 'Ann', role: 'member', active: true, phone: '+1 555 0100', notes: 'private note' });
+  call('savePlayer', { name: 'Cat', role: 'player', active: true, phone: '+1 555 0199' });
+  call('saveSession', session());
+  call('saveMembership', { member: 'Ann', date: '2026-01-01', amount: 11000, hours: 79, rate: 140 });
+  call('saveKitty', { description: 'Balls', amount: -55.5, date: '2026-11-01' });
+  call('setPaid', { month: '2026-11', person: 'Cat', paid: true, amount: 140 });
+  call('setPaid', { month: '2026-11', person: 'Ann', paid: true, amount: 210 });
+  call('saveSettings', { reclub_fee: 123 });
+
+  const memberCode = (gas.sheets.Settings.rows.find((r) => r[0] === 'member_code') || [])[1];
+  assert.match(memberCode, /^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+  assert.notEqual(memberCode, gas.accessCode());
+  const asMember = (action, payload) => gas.post({ code: memberCode, action, payload });
+
+  // every write is refused, and the sheet is untouched
+  const before = JSON.stringify(Object.fromEntries(Object.entries(gas.sheets).map(([k, v]) => [k, v.rows])));
+  for (const [action, payload] of [
+    ['saveSession', session({ session: { id: 's2', date: '2026-11-13' } })], ['deleteSession', { id: 's1' }],
+    ['savePlayer', { name: 'Eve', role: 'member' }], ['setPaid', { month: '2026-11', person: 'Cat', paid: false }],
+    ['saveSettings', { club_name: 'Hacked' }], ['saveKitty', { description: 'x', amount: 1 }],
+    ['saveMembership', { member: 'Ann', hours: 1 }], ['deleteMembership', { id: 'm1' }],
+  ]) {
+    const res = asMember(action, payload);
+    assert.deepEqual([action, res.ok, res.code, res.data], [action, false, 'readonly', undefined]);
+  }
+  assert.equal(JSON.stringify(Object.fromEntries(Object.entries(gas.sheets).map(([k, v]) => [k, v.rows]))), before);
+
+  // what a member is sent
+  const res = asMember('load');
+  assert.equal(res.ok, true);
+  const d = res.data;
+  assert.equal(d.role, 'member');
+  assert.deepEqual(Object.keys(d.settings).sort(), ['club_name', 'currency', 'pay_to']);
+  assert.deepEqual([d.memberships, d.kitty], [[], []]);
+  assert.deepEqual(d.players.map((p) => Object.keys(p).sort().join()), ['active,name,role', 'active,name,role']);
+  assert.deepEqual(d.bookings, [{ session_id: 's1', member: 'Courts', hours: 2, rate: 140 }]);
+  assert.deepEqual(d.payments.map((p) => p.person), ['Cat']);           // no payback payments
+  const text = JSON.stringify(d);
+  for (const secret of ['555', 'private note', '11000', 'Balls', '55.5', '123', '210', gas.accessCode(), memberCode]) {
+    assert.equal(text.includes(secret), false, `leaked ${secret}`);
+  }
+
+  // the member view still bills correctly, with no payback for anyone
+  const st = PB.monthStatement(PB.normalize(d), '2026-11');
+  assert.equal(st.sessions[0].cpp, 70);
+  assert.equal(st.players.find((p) => p.name === 'Cat').total, 140);
+  assert.deepEqual(st.members.map((m) => [m.name, m.credits, m.charges]), [['Ann', 0, 70]]);
+  assert.equal(st.players.some((p) => p.name === 'Courts'), false);
+
+  // admins are told the member code (to share it); the admin code is never sent to anyone
+  const admin = call('load').data;
+  assert.equal(admin.role, 'admin');
+  assert.equal(admin.settings.member_code, memberCode);
+  assert.equal(admin.settings.access_code, undefined);
+  assert.equal(call('saveSettings', { member_code: 'x' }).data.settings.member_code, memberCode);
+});

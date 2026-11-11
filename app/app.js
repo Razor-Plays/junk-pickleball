@@ -46,9 +46,9 @@
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   })();
 
-  function inviteLink() {
+  function inviteLink(code = state.code) {
     const params = new URLSearchParams();
-    params.set('k', state.code);
+    params.set('k', code);
     if (!configuredUrl) params.set('u', state.apiUrl);
     return `${location.origin}${location.pathname}#${params.toString()}`;
   }
@@ -269,16 +269,17 @@
             <div class="title">${esc(label)}</div>
             <div class="sub">${esc(sub)}</div>
           </div>
-          ${sum.heads ? '' : '<span class="pill todo">To fill ›</span>'}
+          ${sum.heads ? '' : `<span class="pill todo">${d.role === 'member' ? 'Booked' : 'To fill ›'}</span>`}
         </button>`;
     };
 
+    const ro = d.role === 'member';
     const balances = PB.membershipBalances(d).filter((b) => b.active);
-    const low = balances.filter((b) => b.purchased && b.left <= 8);
+    const low = ro ? [] : balances.filter((b) => b.purchased && b.left <= 8);
 
     let skipped = [];
     try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
-    const suggestions = PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
+    const suggestions = ro ? [] : PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
     const suggestionCards = suggestions.length ? `
       <h2>Guests who keep coming</h2>
       <div class="list">${suggestions.map((g, i) => `
@@ -297,13 +298,42 @@
       <h2>Sessions</h2>
       ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions yet.</div>'}
       ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all sessions</button>' : ''}
-      <button class="fab" data-action="new-session">${ICON.plus}Session</button>`;
+      ${ro ? '' : `<button class="fab" data-action="new-session">${ICON.plus}Session</button>`}`;
   }
 
   // ------------------------------------------------------------ Session editor
 
+  // Read-only look at one session, for the member view.
+  function viewSession(id) {
+    const d = state.data;
+    const s = d.sessions.find((x) => x.id === id);
+    if (!s) return;
+    const sum = PB.sessionSummary(d, s);
+    const players = sum.attendance.filter((a) => !a.guest);
+    const guests = sum.attendance.filter((a) => a.guest);
+    const el = $('#sheet');
+    el.innerHTML = `
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(PB.dayLabel(s.date, true))}</h3></div>
+      <div class="sheet-body">
+        <div class="stats">
+          <div class="stat"><div class="label">Court time</div><div class="value">${sum.hours}h</div></div>
+          <div class="stat"><div class="label">Court cost</div><div class="value">${money(sum.cost)}</div></div>
+          <div class="stat"><div class="label">Players</div><div class="value">${sum.heads || '—'}</div></div>
+          <div class="stat"><div class="label">Each</div><div class="value">${sum.heads ? money(sum.cpp) : '—'}</div></div>
+        </div>
+        ${sum.heads ? `<h2>Who played <span class="pill">${players.length}</span></h2>
+        <div class="chips">${players.map((a) => `<span class="chip on">${esc(a.name)}</span>`).join('')}</div>` : '<div class="empty">Booked — players not entered yet.</div>'}
+        ${guests.length ? `<h2>Guests <span class="pill">${guests.length}</span></h2>
+        <div class="list">${guests.map((g) => `<div class="row"><div class="grow"><div class="title">${esc(g.name)}</div></div>
+          <span class="muted small">${g.pays === 'Reclub' ? 'Reclub' : g.pays === g.name ? 'pays own way' : `with ${esc(g.pays)}`}</span></div>`).join('')}</div>` : ''}
+      </div>`;
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
   function openSession(id) {
     const d = state.data;
+    if (d.role === 'member') { if (id) viewSession(id); return; }
     const members = d.players.filter((p) => p.role === 'member' && p.active).map((p) => p.name);
     let draft;
     if (id) {
@@ -517,7 +547,11 @@
     const st = PB.monthStatement(d, state.month);
     const s = d.settings;
 
+    // Members of the group get a read-only view: no buttons that change or send anything,
+    // and (enforced by the sheet script, not just here) no paybacks or kitty.
+    const ro = d.role === 'member';
     const paidPill = (entry, amount) => {
+      if (ro) return entry.paid ? '<span class="pill paid">✓ Paid</span>' : '<span class="pill">Not paid yet</span>';
       const changed = entry.paid && Math.abs(entry.paid.amount - amount) > 0.01;
       return `
       <button class="pill ${entry.paid ? (changed ? 'warn' : 'paid') : ''}" style="border:0;cursor:pointer" data-action="toggle-paid"
@@ -545,13 +579,21 @@
         ${itemList(p.items)}
         <div class="btn-row" style="margin-top:8px">
           ${paidPill(p, p.total)}
-          <button class="btn ghost" data-action="send-player" data-person="${esc(p.name)}">Send bill</button>
+          ${ro ? '' : `<button class="btn ghost" data-action="send-player" data-person="${esc(p.name)}">Send bill</button>`}
         </div>
       </div>`;
     const regularCards = st.players.filter((p) => !p.isGuest).map(playerCard).join('');
     const guestCards = st.players.filter((p) => p.isGuest).map(playerCard).join('');
 
-    const memberCards = st.members.map((m) => `
+    const memberCards = ro ? st.members.filter((m) => m.charges > 0).map((m) => `
+      <div class="card" data-card="${esc(m.name)}">
+        <div class="row" style="padding:0;border:0">
+          <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
+            <div class="sub">${m.games} game${m.games === 1 ? '' : 's'}${m.guests.length ? ` · incl. ${guestNote(m)}` : ''}</div></div>
+          <div class="amount">${money(m.charges)}</div>
+        </div>
+        ${itemList(m.items)}
+      </div>`).join('') : st.members.map((m) => `
       <div class="card" data-card="${esc(m.name)}">
         <div class="row" style="padding:0;border:0">
           <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
@@ -566,7 +608,7 @@
       </div>`).join('');
 
     const r = st.reclub;
-    const warnings = st.warnings.length
+    const warnings = st.warnings.length && !ro
       ? `<div class="warn-box"><b>Check before sending</b><ul>${st.warnings.map((w) => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : '';
 
     const paidCount = st.players.filter((p) => p.paid).length;
@@ -588,7 +630,15 @@
           money(p.total), p.paid)).join('')}
         <div class="glance-row total"><span class="name">Total to collect</span><span class="amount">${money(st.totals.players)}</span></div>
       </details>` : '';
-    const membersGlance = st.members.length ? `
+    const memberFees = PB.round2(st.members.reduce((sum, m) => sum + m.charges, 0));
+    const membersGlance = ro ? (memberFees > 0 ? `
+      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· court fees</span></span>
+          <span class="amount">${money(memberFees)}</span></summary>
+        ${st.members.filter((m) => m.charges > 0).map((m) => glanceRow(m.name,
+          m.guests.length ? `incl. ${m.guests.map((g) => esc(g.name)).join(', ')}` : '', money(m.charges), false)).join('')}
+        <div class="glance-row total"><span class="name">Members' court fees</span><span class="amount">${money(memberFees)}</span></div>
+      </details>` : '') : st.members.length ? `
       <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
         <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· payback</span></span>
           <span class="amount">${money(st.totals.payback)}</span></summary>
@@ -608,20 +658,25 @@
       ${owingBox}
       ${st.sessions.length ? `
       <div class="stats">
-        <div class="stat"><div class="label">Collect from players</div><div class="value">${money(st.totals.players)}</div></div>
-        <div class="stat"><div class="label">Pay back to members</div><div class="value">${money(st.totals.payback)}</div></div>
+        <div class="stat"><div class="label">${ro ? 'Players\' court fees' : 'Collect from players'}</div><div class="value">${money(st.totals.players)}</div></div>
+        ${ro ? `<div class="stat"><div class="label">Members' court fees</div><div class="value">${money(memberFees)}</div></div>`
+          : `<div class="stat"><div class="label">Pay back to members</div><div class="value">${money(st.totals.payback)}</div></div>`}
         <div class="stat"><div class="label">Court cost (${st.sessions.length} sessions)</div><div class="value">${money(st.totals.courtCost)}</div></div>
         <div class="stat"><div class="label">Players paid</div><div class="value">${paidCount}/${st.players.length}</div></div>
       </div>` : ''}
 
       ${playersGlance}
       ${membersGlance}
-      ${st.sessions.length ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
+      ${st.sessions.length && !ro ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
 
       ${regularCards ? `<h2>Regulars — details</h2>${regularCards}` : ''}
       ${guestCards ? `<h2>Guests paying their own way — details</h2>${guestCards}` : ''}
-      ${st.members.length ? `<h2>Members — details</h2>${memberCards}` : ''}
-      ${r ? `<h2>Reclub</h2>
+      ${memberCards ? `<h2>Members — details</h2>${memberCards}` : ''}
+      ${r && ro ? `<h2>Reclub</h2>
+        <div class="card">
+          <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub player${r.heads === 1 ? '' : 's'}<div class="sub">Same court fee as everyone else</div></div><div class="amount">${money(r.courtShare)}</div></div>
+        </div>` : ''}
+      ${r && !ro ? `<h2>Reclub</h2>
         <div class="card">
           <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub players × ${money(d.settings.reclub_fee)}</div><div class="amount">${money(r.income)}</div></div>
           <div class="row" style="padding:4px 0 0;border:0"><div class="grow muted">Their share of court cost</div><div class="amount">−${money(r.courtShare)}</div></div>
@@ -634,6 +689,17 @@
 
   function renderClub() {
     const d = state.data;
+    if (d.role === 'member') {
+      const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
+      return `
+        <div class="card"><b>Member view</b><div class="small muted">You can see sessions, who played and the bills. Changes are made by the people who run the club.</div></div>
+        <h2>Players <span class="pill">${names.length}</span></h2>
+        <div class="list">${names.map((p) => `<div class="row"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div></div>`).join('')}</div>
+        <h2>More</h2>
+        <div class="card"><a class="btn secondary" href="../" target="_blank" rel="noopener">Open stats page</a></div>
+        <p class="small muted center">Loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
+          <button class="btn ghost small" data-action="sign-out">Sign out on this device</button></p>`;
+    }
     const balances = PB.membershipBalances(d);
     const kitty = PB.kitty(d);
     const players = [...d.players].sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name));
@@ -685,9 +751,10 @@
       </div>
       <h2>Share</h2>
       <div class="card">
-        <p class="small muted" style="margin-top:0">The invite link signs another phone in with one tap. It gives full access, so only send it to people who run the club.</p>
+        <p class="small muted" style="margin-top:0">A link signs a phone in with one tap. The <b>admin link</b> gives full access, so only send it to people who run the club. The <b>member link</b> is look-only: sessions, who played and bills, with no paybacks, membership hours or kitty.</p>
         <div class="btn-row">
-          <button class="btn secondary" data-action="share-invite">Send invite link</button>
+          <button class="btn secondary" data-action="share-invite">Send admin link</button>
+          ${d.settings.member_code ? '<button class="btn secondary" data-action="share-member-invite">Send member link</button>' : ''}
           <a class="btn ghost" href="../" target="_blank" rel="noopener">Open stats page</a>
         </div>
       </div>
@@ -904,6 +971,13 @@
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(); break;
+      case 'share-member-invite': {
+        const link = inviteLink(String(state.data.settings.member_code));
+        const text = `${state.data.settings.club_name || 'Junk Pickleball'} — tap to see sessions and bills: ${link}`;
+        if (navigator.share) navigator.share({ text }).catch(() => {});
+        else copyText(link);
+        break;
+      }
       case 'share-invite': {
         const link = inviteLink();
         if (navigator.share) navigator.share({ text: `Junk Pickleball manager app — tap to sign in: ${link}` }).catch(() => {});

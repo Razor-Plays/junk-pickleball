@@ -29,7 +29,8 @@
   'use strict';
 
   const RECLUB = 'Reclub';
-  const PB = { RECLUB };
+  const COURTS = 'Courts';   // the member view gets bookings merged under this name
+  const PB = { RECLUB, COURTS };
 
   // ---------- small helpers ----------
 
@@ -98,6 +99,7 @@
     settings.reclub_fee = num(settings.reclub_fee, 100);
 
     return {
+      role: r.role === 'member' ? 'member' : 'admin',
       settings,
       players: (r.players || []).filter((p) => clean(p.name)).map((p) => ({
         name: clean(p.name),
@@ -223,6 +225,7 @@
           text: `${PB.dayLabel(s.date)}: players entered but no court hours booked` });
       }
       for (const b of s.bookings) {
+        if (b.member === COURTS) continue;   // member view: cost only, nobody is credited
         const p = getPerson(b.member);
         const value = round2(b.hours * b.rate);
         p.credits = round2(p.credits + value);

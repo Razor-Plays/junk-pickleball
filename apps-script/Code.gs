@@ -12,12 +12,15 @@
  *        Execute as: Me      Who has access: Anyone
  *      Copy the /exec URL into app/config.js (or the app's setup screen).
  *
- * Every data request must include the access code from the Settings tab.
+ * Every data request must include a code from the Settings tab:
+ *   access_code  full access, for the people who run the club
+ *   member_code  read-only: sessions, who played and bills. No changes, and
+ *                no memberships, paybacks, kitty, Reclub fee or phone numbers.
  * The only thing served without it is the attendance-only stats feed, and
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 3;
+const API_VERSION = 4;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -80,6 +83,7 @@ function setup() {
     if (!(k in settings)) toAdd.push([k, String(DEFAULT_SETTINGS[k])]);
   });
   if (!settings.access_code) toAdd.push(['access_code', newAccessCode_()]);
+  if (!settings.member_code) toAdd.push(['member_code', newAccessCode_()]);
   if (toAdd.length) appendRows_('Settings', toAdd);
 
   Logger.log('Setup done. The access code is in the Settings tab (access_code). Change it there any time.');
@@ -159,8 +163,12 @@ function doPost(e) {
   if (failures >= MAX_FAILED_ATTEMPTS) {
     return json_({ ok: false, error: 'Too many wrong access codes. Try again in 10 minutes.', code: 'locked' });
   }
-  const expected = String(readSettings_().access_code || '').trim();
-  if (!expected || String(body.code || '').trim() !== expected) {
+  const codes = readSettings_();
+  const given = String(body.code || '').trim();
+  const adminCode = String(codes.access_code || '').trim();
+  const memberCode = String(codes.member_code || '').trim();
+  const role = given && given === adminCode ? 'admin' : (given && memberCode && given === memberCode ? 'member' : '');
+  if (!role) {
     cache.put('failed_attempts', String(failures + 1), FAILURE_WINDOW_SECONDS);
     Utilities.sleep(800); // slow down guessing
     return json_({ ok: false, error: 'Wrong access code', code: 'auth' });
@@ -171,6 +179,11 @@ function doPost(e) {
     lock.waitLock(20000);
     const handler = ACTIONS[body.action];
     if (!handler) return json_({ ok: false, error: 'Unknown action: ' + body.action });
+    if (role === 'member') {
+      // Members can look, nothing else. This is the real lock; the app hiding buttons is only tidiness.
+      if (body.action !== 'load') return json_({ ok: false, error: 'This code is read-only.', code: 'readonly' });
+      return json_({ ok: true, data: memberView_(loadAll_()) });
+    }
     handler(body.payload || {});
     SpreadsheetApp.flush();
     return json_({ ok: true, data: loadAll_() });
@@ -277,7 +290,7 @@ const ACTIONS = {
   /** payload: { key: value, ... } — the access code can't be changed from the app. */
   saveSettings: function (p) {
     Object.keys(p).forEach(function (k) {
-      if (k === 'access_code') return;
+      if (k === 'access_code' || k === 'member_code') return;
       upsertBy_('Settings', 'key', k, { key: k, value: String(p[k]) });
     });
   },
@@ -287,9 +300,10 @@ const ACTIONS = {
 
 function loadAll_() {
   const settings = readSettings_();
-  delete settings.access_code;
+  delete settings.access_code;   // member_code stays: admins need it to share the member link
   return {
     version: API_VERSION,
+    role: 'admin',
     loaded_at: new Date().toISOString(),
     settings: settings,
     players: readTable_('Players'),
@@ -299,6 +313,42 @@ function loadAll_() {
     memberships: readTable_('Memberships'),
     payments: readTable_('Payments'),
     kitty: readTable_('Kitty'),
+  };
+}
+
+/**
+ * What a member's phone is sent. Anything they shouldn't know is left out
+ * here, on the server, so it can't be dug out of the app:
+ *   - who booked which court (that, with the fees, is the payback), so
+ *     bookings are merged into one "Courts" line per session
+ *   - memberships (hours left), kitty, Reclub fee, settings other than names
+ *   - phone numbers and notes, and payments made to members (paybacks)
+ */
+function memberView_(data) {
+  const isMember = {};
+  data.players.forEach(function (p) { if (p.role === 'member') isMember[p.name] = true; });
+  const courts = {};
+  data.bookings.forEach(function (b) {
+    const c = courts[b.session_id] || (courts[b.session_id] = { hours: 0, cost: 0 });
+    c.hours += Number(b.hours) || 0;
+    c.cost += (Number(b.hours) || 0) * (Number(b.rate) || 0);
+  });
+  return {
+    version: data.version,
+    role: 'member',
+    loaded_at: data.loaded_at,
+    settings: { club_name: data.settings.club_name, currency: data.settings.currency, pay_to: data.settings.pay_to },
+    players: data.players.map(function (p) { return { name: p.name, role: p.role, active: p.active }; }),
+    sessions: data.sessions.map(function (s) { return { id: s.id, date: s.date }; }),
+    bookings: Object.keys(courts).map(function (id) {
+      const c = courts[id];
+      return { session_id: id, member: 'Courts', hours: c.hours, rate: c.hours ? c.cost / c.hours : 0 };
+    }),
+    attendance: data.attendance,
+    memberships: [],
+    payments: data.payments.filter(function (p) { return !isMember[p.person]; })
+      .map(function (p) { return { month: p.month, person: p.person, amount: p.amount, paid_on: p.paid_on }; }),
+    kitty: [],
   };
 }
 
