@@ -297,9 +297,9 @@
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Hours running low: ${low.map((b) => `<b>${esc(b.name)} ${b.left}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
       ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
       ${suggestionCards}
-      <h2>Sessions</h2>
-      ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions yet.</div>'}
-      ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all sessions</button>' : ''}
+      <h2>Past sessions</h2>
+      ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions played yet.</div>'}
+      ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all past sessions</button>' : ''}
       ${ro ? '' : `<button class="fab" data-action="new-session">${ICON.plus}Session</button>`}`;
   }
 
