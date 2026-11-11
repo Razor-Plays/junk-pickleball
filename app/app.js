@@ -839,6 +839,13 @@
       <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(name)}</h3>
         ${admin && h.player ? `<button class="btn ghost" data-action="edit-player" data-name="${esc(name)}">Edit</button>` : ''}</div>
       <div class="sheet-body">
+        <div class="profile-head">
+          <span class="avatar big${h.isMember ? '' : ' alt'}" aria-hidden="true">${esc(name.slice(0, 1).toUpperCase())}</span>
+          <div class="grow">
+            <div class="profile-name">${esc(name)}</div>
+            <div class="profile-sub">${h.isMember ? 'Member' : h.isGuest ? 'Guest' : 'Regular'}${h.first ? ` · since ${esc(PB.monthLabel(h.first.slice(0, 7)).replace(/^(\w{3})\w*/, '$1'))}` : ''}${h.player && !h.player.active ? ' · inactive' : ''}</div>
+          </div>
+        </div>
         <div class="stats">
           <div class="stat"><div class="label">Games played</div><div class="value">${h.games}</div></div>
           <div class="stat"><div class="label">First game</div><div class="value">${h.first ? esc(PB.dayLabel(h.first, true).slice(4)) : '—'}</div></div>
