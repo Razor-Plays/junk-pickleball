@@ -20,6 +20,11 @@ WhatsApp. Data lives in a Google Sheet, so you can always open it there too.
 | **Bills** | Pick a month. Two fold-away tables give the month at a glance (one line per player, one per member, with totals and who has paid); tap a line to jump to that person's details. Below that: what each regular owes (with each guest's share spelled out), guests paying their own way, each member's payback, Reclub income and what goes to the kitty. **Share summary with the group** lists everyone on their own line: regulars, guests (with their host), and members. **Send bill** opens WhatsApp with the message filled in. **Mark paid** records payment, flags a bill that changed after it was paid, and lists anything still unpaid from earlier months. Warnings appear for sessions with no players, unassigned guests, etc. |
 | **Club** | Membership hours used / left, record a new membership purchase (any price/hours/rate), kitty balance and spending, players (add, rename, make member, inactive, WhatsApp number), settings, the invite link for another phone, and the on/off switch for the public stats page. |
 
+Each session records where it was played and how long it ran, so 4 booked
+hours read as "2 courts × 2h". Tapping a name (on Club, or **History** on a
+bill) opens that person's page: games, first game, fees, games per month, and
+every month's lines.
+
 A named guest who has come three times is suggested as a regular; making them
 one carries their past visits over. Names must be unique (ignoring case), since
 bills are kept by name: a second Neil has to be "Neil G".
@@ -109,7 +114,7 @@ formula edit.
 | Tab | Columns |
 | --- | --- |
 | Players | name, role (`member`/`player`), active, phone, notes |
-| Sessions | id, date (`YYYY-MM-DD`), reclub_fee, notes, updated_at |
+| Sessions | id, date (`YYYY-MM-DD`), reclub_fee, notes, updated_at, location, play_hours |
 | Bookings | session_id, member, hours, rate |
 | Attendance | session_id, name, guest, pays |
 | Memberships | id, member, date, amount, hours, rate, notes |

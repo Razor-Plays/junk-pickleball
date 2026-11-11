@@ -259,3 +259,33 @@ test('names clash ignoring case and spacing', () => {
   assert.equal(PB.playerNamed(data, 'Ann G'), null);
   assert.equal(PB.playerNamed(data, 'ANN', 'Ann'), null); // renaming yourself is fine
 });
+
+test('court wording: booked hours read as courts x session length', () => {
+  const label = (hours, play_hours) => PB.courtLabel({ hours, session: { play_hours } });
+  assert.equal(label(4, 0), '2 courts × 2h');      // length not recorded: sessions run 2 hours
+  assert.equal(label(2, 0), '1 court × 2h');
+  assert.equal(label(4, 1), '4 courts × 1h');
+  assert.equal(label(3, 1.5), '2 courts × 1.5h');
+  assert.equal(label(1, 0), '1 court-hour');       // doesn't divide into whole courts
+  assert.equal(label(0, 2), 'no courts booked');
+});
+
+test('player history: months, totals and who paid', () => {
+  const h = PB.playerHistory(mixed, 'Cat');
+  assert.deepEqual([h.games, h.first, h.last, h.fees, h.perGame], [2, '2026-12-03', '2026-12-10', 220, 110]);
+  assert.deepEqual(h.months.map((m) => [m.month, m.games, m.fees, m.items.length]), [['2026-12', 2, 220, 4]]);
+  assert.deepEqual(h.months[0].items.map((i) => [i.kind, i.who]), [['self', ''], ['guest', 'Jeremy'], ['self', ''], ['guest', 'Jeremy']]);
+  assert.deepEqual(h.years.map((y) => [y.year, y.games, y.fees]), [['2026', 2, 220]]);
+  assert.equal(h.totalSessions, 2);
+  // a hosted guest played but owes nothing themselves
+  const j = PB.playerHistory(mixed, 'Jeremy');
+  assert.deepEqual([j.games, j.fees, j.isGuest, j.months[0].items[0].kind, j.months[0].items[0].paidBy], [2, 0, true, 'hosted', 'Cat']);
+  // paid months are flagged; someone who never played has an empty history
+  assert.ok(PB.playerHistory(data, 'Cat').months.find((m) => m.month === '2026-10').paid);
+  assert.deepEqual(PB.playerHistory(data, 'Eve').months, []);
+});
+
+test('locations come from settings, in order', () => {
+  assert.deepEqual(PB.locations(PB.normalize({ settings: { locations: ' A | B |  | C ' } })), ['A', 'B', 'C']);
+  assert.equal(PB.locations(PB.normalize({}))[0], 'Metro City Plaza Phase 3');
+});

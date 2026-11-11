@@ -222,3 +222,16 @@ test('member code: read-only, and nothing private ever leaves the sheet', () => 
   assert.equal(admin.settings.access_code, undefined);
   assert.equal(call('saveSettings', { member_code: 'x' }).data.settings.member_code, memberCode);
 });
+
+test('a session keeps its location and length, and members can see them', () => {
+  const { gas, call } = fresh();
+  const res = call('saveSession', session({ session: { id: 's1', date: '2026-11-12', location: 'Tin Hau', play_hours: 2 } }));
+  assert.deepEqual([res.data.sessions[0].location, res.data.sessions[0].play_hours], ['Tin Hau', 2]);
+  assert.equal(gas.sheets.Sessions.maxCols >= 7, true, 'older tabs get the new columns');
+  assert.equal(gas.sheets.Sessions.rows[0].join(), 'id,date,reclub_fee,notes,updated_at,location,play_hours');
+  const memberCode = (gas.sheets.Settings.rows.find((r) => r[0] === 'member_code') || [])[1];
+  const m = gas.post({ code: memberCode, action: 'load' }).data.sessions[0];
+  assert.deepEqual(m, { id: 's1', date: '2026-11-12', location: 'Tin Hau', play_hours: 2 });
+  // a session saved without them (an older app) is fine
+  assert.equal(call('saveSession', session({ session: { id: 's2', date: '2026-11-13' } })).data.sessions[1].location, '');
+});

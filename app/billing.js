@@ -92,7 +92,8 @@
   PB.normalize = (raw) => {
     const r = raw || {};
     const settings = Object.assign(
-      { default_rate: 140, reclub_fee: 100, currency: '$', club_name: 'Junk Pickleball', pay_to: 'Tommy', public_stats: 'TRUE' },
+      { default_rate: 140, reclub_fee: 100, currency: '$', club_name: 'Junk Pickleball', pay_to: 'Tommy', public_stats: 'TRUE',
+        locations: 'Metro City Plaza Phase 3 | D-Park, Tsuen Wan | Tin Hau | Wong Chuk Hang' },
       r.settings || {}
     );
     settings.default_rate = num(settings.default_rate, 140);
@@ -114,6 +115,8 @@
         reclub_fee: s.reclub_fee === '' || s.reclub_fee === undefined ? settings.reclub_fee : num(s.reclub_fee),
         notes: clean(s.notes),
         updated_at: clean(s.updated_at),
+        location: clean(s.location),
+        play_hours: num(s.play_hours),   // how long the session ran; 0 = not recorded
       })),
       bookings: (r.bookings || []).filter((b) => clean(b.session_id) && clean(b.member) && num(b.hours) > 0)
         .map((b) => ({
@@ -188,6 +191,88 @@
       reclubHeads,
       reclubIncome: round2(reclubHeads * session.reclub_fee),
       reclubProfit: round2(reclubHeads * (session.reclub_fee - cpp)),
+    };
+  };
+
+  PB.locations = (data) => clean(data.settings.locations).split('|').map((x) => x.trim()).filter(Boolean);
+
+  /**
+   * "4 booked hours" is really 2 courts for 2 hours. Sessions run 2 hours
+   * unless a different length was recorded; if the booked hours don't divide
+   * into whole courts we just say how many court-hours there were.
+   */
+  PB.courtLabel = (summary) => {
+    const total = summary.hours;
+    if (!total) return 'no courts booked';
+    const length = summary.session.play_hours || 2;
+    const courts = total / length;
+    if (Number.isInteger(courts)) return `${courts} court${courts === 1 ? '' : 's'} × ${length}h`;
+    return `${total} court-hour${total === 1 ? '' : 's'}`;
+  };
+
+  /**
+   * One person's whole story: every month they played or were charged, with
+   * the lines behind it, plus totals. Works for regulars, members and guests.
+   */
+  PB.playerHistory = (data, name) => {
+    const idx = PB.index(data);
+    const months = new Map();
+    const month = (m) => {
+      if (!months.has(m)) months.set(m, { month: m, games: 0, fees: 0, items: [] });
+      return months.get(m);
+    };
+    const weekdays = new Map();
+    const places = new Map();
+    let first = '';
+    let last = '';
+    let games = 0;
+    const sessions = [...data.sessions].sort((a, b) => a.date.localeCompare(b.date));
+    for (const s of sessions) {
+      const sum = PB.sessionSummary(data, s, idx);
+      for (const a of sum.attendance) {
+        const played = a.name === name;
+        const pays = (a.pays || a.name) === name;
+        if (!played && !pays) continue;
+        const m = month(PB.monthOf(s.date));
+        if (played) {
+          m.games += 1; games += 1;
+          if (!first) first = s.date;
+          last = s.date;
+          const wd = PB.dayLabel(s.date).slice(0, 3);
+          weekdays.set(wd, (weekdays.get(wd) || 0) + 1);
+          if (s.location) places.set(s.location, (places.get(s.location) || 0) + 1);
+        }
+        if (pays) m.fees = round2(m.fees + sum.cpp);
+        m.items.push({
+          date: s.date, session: s.id, amount: sum.cpp, location: s.location,
+          kind: played && pays ? 'self' : played ? 'hosted' : 'guest',   // hosted = someone else paid for them
+          who: played ? '' : a.name, paidBy: pays ? '' : a.pays,
+        });
+      }
+    }
+    const paid = new Map(data.payments.filter((p) => p.person === name).map((p) => [p.month, p]));
+    const list = [...months.values()].sort((a, b) => b.month.localeCompare(a.month))
+      .map((m) => ({ ...m, paid: paid.get(m.month) || null }));
+    const top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1])[0];
+    const years = new Map();
+    for (const m of list) {
+      const y = m.month.slice(0, 4);
+      const e = years.get(y) || { year: y, games: 0, fees: 0, months: [] };
+      e.games += m.games; e.fees = round2(e.fees + m.fees); e.months.push(m);
+      years.set(y, e);
+    }
+    const fees = round2(list.reduce((sum, m) => sum + m.fees, 0));
+    const player = data.players.find((p) => p.name === name) || null;
+    return {
+      name, player, isMember: !!player && player.role === 'member', isGuest: !player,
+      first, last, games, fees,
+      perGame: games ? round2(fees / games) : 0,
+      totalSessions: sessions.filter((s) => s.date >= first && first && (idx.attendance.get(s.id) || []).length).length,
+      favouriteDay: (top(weekdays) || [''])[0],
+      favouritePlace: (top(places) || ['', 0])[1] >= 3 ? top(places)[0] : '',   // needs a few games to mean anything
+      busiestMonth: [...list].sort((a, b) => b.games - a.games)[0] || null,
+      months: list,
+      years: [...years.values()].sort((a, b) => b.year.localeCompare(a.year)),
     };
   };
 
