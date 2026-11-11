@@ -24,6 +24,9 @@ A named guest who has come three times is suggested as a regular; making them
 one carries their past visits over. Names must be unique (ignoring case), since
 bills are kept by name: a second Neil has to be "Neil G".
 
+The app is green and white by default; the moon button in the top bar
+switches that phone to night mode.
+
 Two people can use it at once: if someone else changed a session while you
 had it open, your save is refused with a message instead of overwriting
 theirs.

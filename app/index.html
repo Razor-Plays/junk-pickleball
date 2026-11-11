@@ -11,12 +11,19 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
+  <script>
+    // Apply the saved day/night choice before the page paints, so it never flashes.
+    try { if (localStorage.getItem('jpb.theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+  </script>
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">🥒 <span id="clubName">Junk Pickleball</span></div>
-    <button class="icon-btn" data-action="refresh" aria-label="Refresh" title="Refresh">⟳</button>
+    <div class="topbar-actions">
+      <button class="icon-btn" data-action="toggle-theme" aria-label="Switch to night mode" title="Switch to night mode">🌙</button>
+      <button class="icon-btn" data-action="refresh" aria-label="Refresh" title="Refresh">⟳</button>
+    </div>
   </header>
 
   <main id="view" aria-live="polite"></main>

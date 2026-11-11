@@ -6,6 +6,7 @@
     api: 'jpb.apiUrl',
     code: 'jpb.code',
     cache: 'jpb.cache',
+    theme: 'jpb.theme',
     notRegular: 'jpb.notRegular',
     tab: 'jpb.tab',
   };
@@ -60,6 +61,25 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
+
+  // ------------------------------------------------------------ day / night
+
+  function applyTheme(theme) {
+    const dark = theme === 'dark';
+    if (dark) document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    const scheme = document.querySelector('meta[name="color-scheme"]');
+    if (scheme) scheme.content = dark ? 'dark' : 'light';
+    const bar = document.querySelector('meta[name="theme-color"]');
+    if (bar) bar.content = dark ? '#14532f' : '#1f7a4d';
+    const btn = document.querySelector('[data-action="toggle-theme"]');
+    if (btn) {
+      btn.textContent = dark ? '☀️' : '🌙';
+      btn.setAttribute('aria-label', dark ? 'Switch to day mode' : 'Switch to night mode');
+      btn.title = btn.getAttribute('aria-label');
+    }
+  }
+  applyTheme(store.get(LS.theme));
 
   // ------------------------------------------------------------ toast
 
@@ -315,9 +335,14 @@
     const freq = PB.frequency(d, since);
     const active = d.players.filter((p) => p.active || dr.players.includes(p.name));
     const q = dr.search.trim().toLowerCase();
-    const list = active
-      .filter((p) => !q || p.name.toLowerCase().includes(q))
-      .sort((a, b) => (freq.get(b.name) || 0) - (freq.get(a.name) || 0) || a.name.localeCompare(b.name));
+    const byActivity = (a, b) => (freq.get(b.name) || 0) - (freq.get(a.name) || 0) || a.name.localeCompare(b.name);
+    const list = active.filter((p) => !q || p.name.toLowerCase().includes(q)).sort(byActivity);
+    // "Usual crowd" = played at least 3 times in the last 4 months.
+    const usual = list.filter((p) => (freq.get(p.name) || 0) >= 3);
+    const others = list.filter((p) => (freq.get(p.name) || 0) < 3).sort((a, b) => a.name.localeCompare(b.name));
+    const chip = (p) => `<button class="chip${dr.players.includes(p.name) ? ' on' : ''}" data-action="toggle-player" data-name="${esc(p.name)}">${esc(p.name)}${p.role === 'member' ? '<span class="tag">★</span>' : ''}</button>`;
+    const addChip = q && !PB.playerNamed(d, dr.search) ? `<button class="chip" data-action="quick-add-player" data-name="${esc(dr.search.trim())}">＋ Add "${esc(dr.search.trim())}"</button>` : '';
+    const grouped = !q && usual.length >= 4 && others.length > 0;
 
     const payOptions = (current) => {
       const names = [...dr.players].sort();
@@ -366,10 +391,12 @@
 
         <h2>Who played <span class="pill">${dr.players.length}</span></h2>
         <input type="search" id="dSearch" placeholder="Search players" value="${esc(dr.search)}" style="margin-bottom:10px" />
-        <div class="chips">
-          ${list.map((p) => `<button class="chip${dr.players.includes(p.name) ? ' on' : ''}" data-action="toggle-player" data-name="${esc(p.name)}">${esc(p.name)}${p.role === 'member' ? '<span class="tag">★</span>' : ''}</button>`).join('')}
-          ${q && !PB.playerNamed(d, dr.search) ? `<button class="chip" data-action="quick-add-player" data-name="${esc(dr.search.trim())}">＋ Add "${esc(dr.search.trim())}"</button>` : ''}
-        </div>
+        ${grouped ? `
+        <div class="chip-label">Usual crowd — most active first</div>
+        <div class="chips">${usual.map(chip).join('')}</div>
+        <div class="chip-label">Everyone else — A to Z</div>
+        <div class="chips">${others.map(chip).join('')}</div>` : `
+        <div class="chips">${list.map(chip).join('')}${addChip}</div>`}
 
         <h2>Guests <span class="pill">${dr.guests.length}</span></h2>
         ${dr.guests.map((g, i) => `
@@ -527,7 +554,7 @@
       </button>`;
     const playersGlance = st.players.length ? `
       <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
-        <summary><span class="grow">Players <span class="count">· ${paidCount}/${st.players.length} paid</span></span>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Players <span class="count">· ${paidCount}/${st.players.length} paid</span></span>
           <span class="amount">${money(st.totals.players)}</span></summary>
         ${st.players.map((p) => glanceRow(p.name,
           [p.isGuest ? 'guest' : '', p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : ''].filter(Boolean).join(' · '),
@@ -536,7 +563,7 @@
       </details>` : '';
     const membersGlance = st.members.length ? `
       <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
-        <summary><span class="grow">Members <span class="count">· payback from ${esc(s.pay_to || 'Tommy')}</span></span>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· payback</span></span>
           <span class="amount">${money(st.totals.payback)}</span></summary>
         ${st.members.map((m) => glanceRow(m.name, `booked ${money(m.credits)} − fees ${money(m.charges)}`,
           m.payback < 0 ? `owes ${money(-m.payback)}` : money(m.payback), m.paid, m.payback < 0)).join('')}
@@ -767,6 +794,12 @@
         break;
       }
       case 'refresh': if (!state.busy) refresh(); break;
+      case 'toggle-theme': {
+        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        store.set(LS.theme, next);
+        applyTheme(next);
+        break;
+      }
       case 'show-all': state.showAllSessions = true; render(); break;
       case 'new-session': openSession(null); break;
       case 'edit-session': openSession(t.dataset.id); break;
