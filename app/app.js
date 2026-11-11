@@ -590,7 +590,7 @@
     const playerCard = (p) => `
       <div class="card" data-card="${esc(p.name)}">
         <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title">${esc(p.name)}${p.isGuest ? ' <span class="pill">guest</span>' : ''}</div>
+          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(p.name)}">${esc(p.name)}</button>${p.isGuest ? ' <span class="pill">guest</span>' : ''}</div>
             <div class="sub">${p.games} game${p.games === 1 ? '' : 's'}${p.guests.length ? ` · incl. ${guestNote(p)}` : ''}</div></div>
           <div class="amount">${money(p.total)}</div>
         </div>
@@ -607,7 +607,7 @@
     const memberCards = ro ? st.members.filter((m) => m.charges > 0).map((m) => `
       <div class="card" data-card="${esc(m.name)}">
         <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
+          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(m.name)}">${esc(m.name)}</button> <span class="tag muted small">member</span></div>
             <div class="sub">${m.games} game${m.games === 1 ? '' : 's'}${m.guests.length ? ` · incl. ${guestNote(m)}` : ''}</div></div>
           <div class="amount">${money(m.charges)}</div>
         </div>
@@ -615,7 +615,7 @@
       </div>`).join('') : st.members.map((m) => `
       <div class="card" data-card="${esc(m.name)}">
         <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title">${esc(m.name)} <span class="tag muted small">member</span></div>
+          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(m.name)}">${esc(m.name)}</button> <span class="tag muted small">member</span></div>
             <div class="sub">booked ${money(m.credits)} − court fees ${money(m.charges)}${m.guests.length ? ` (incl. ${guestNote(m)})` : ''}</div></div>
           <div class="amount ${m.payback < 0 ? 'neg' : ''}">${m.payback < 0 ? 'owes ' + money(-m.payback) : money(m.payback)}</div>
         </div>
@@ -635,7 +635,7 @@
     // The month at a glance: one line per person, like the old Monthly Bill tab.
     const isOpen = (key) => store.get(`jpb.open.${key}`) !== '0';
     const glanceRow = (name, note, amount, paid, neg = false) => `
-      <button class="glance-row" data-action="jump-card" data-person="${esc(name)}">
+      <button class="glance-row" data-action="open-player" data-name="${esc(name)}">
         <span class="name">${esc(name)}${note ? `<span class="note">${note}</span>` : ''}</span>
         ${paid ? '<span class="tick">✓ paid</span>' : ''}
         <span class="amount ${neg ? 'neg' : ''}">${amount}</span>
