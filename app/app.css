@@ -83,6 +83,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   width: 38px; height: 38px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
 }
+a.icon-btn { text-decoration: none; }
 .icon-btn svg { width: 22px; height: 22px; }
 .icon-btn.muted { color: var(--muted); font-size: 16px; width: 28px; height: 32px; margin-right: -6px; }
 .icon-btn.spin svg { animation: spin 1s linear infinite; }
