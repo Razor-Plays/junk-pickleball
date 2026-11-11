@@ -383,3 +383,9 @@ textarea { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px sol
 .name-link { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .glance-row .name { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .glance-row.total .name { text-decoration: none; }
+
+/* who this page is about */
+.profile-head { display: flex; align-items: center; gap: 14px; margin: 6px 2px 16px; }
+.avatar.big { width: 64px; height: 64px; font-size: 30px; box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--accent); }
+.profile-name { font-size: 28px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+.profile-sub { color: var(--muted); font-size: 14px; margin-top: 3px; }
