@@ -1,6 +1,6 @@
 (() => {
   const SHEET_ID = '1pe2SvzjhPTlWaRfMWkuXmErbjPWHGIEraELYhZxgAHA';
-  const BUILD_TAG = '2026-11-11.1';
+  const BUILD_TAG = '2026-11-11.2';
   // The manager app's sheet API also serves an attendance-only feed (no money).
   const API_URL = (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || '';
   const CSV_URL = (sheetName) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
@@ -286,6 +286,47 @@
     $('#kpiSync').textContent = syncLabel || '—';
   }
 
+  const NEWCOMER_DAYS = 90;
+
+  // First game ever for each player, from every row we have (ignores the date filter).
+  function firstEverDates() {
+    const first = new Map();
+    for (const r of state.rawRows) {
+      const cur = first.get(r.playerName);
+      if (!cur || r.sessionDate < cur) first.set(r.playerName, r.sessionDate);
+    }
+    return first;
+  }
+
+  // Players whose first game ever was in the 90 days before the latest session shown.
+  function newcomers(players, sessions) {
+    const latest = sessions[sessions.length - 1]?.date;
+    if (!latest) return [];
+    const first = firstEverDates();
+    return players
+      .map((p) => ({ ...p, firstEver: first.get(p.playerName) || p.firstAttendanceDate }))
+      .filter((p) => p.firstEver && daysBetween(latest, p.firstEver) <= NEWCOMER_DAYS);
+  }
+
+  // Someone who played in the last 3 sessions after missing at least 6 in a row.
+  function bestReturn(players, sessions) {
+    let best = null;
+    for (const p of players) {
+      const idx = [];
+      sessions.forEach((s, i) => { if (s.players?.includes(p.playerName)) idx.push(i); });
+      if (idx.length < 2) continue;
+      const last = idx[idx.length - 1];
+      if (last < sessions.length - 3) continue;
+      // walk back over the current run to find the gap before it
+      let k = idx.length - 1;
+      while (k > 0 && idx[k] - idx[k - 1] === 1) k -= 1;
+      if (k === 0) continue;
+      const gap = idx[k] - idx[k - 1] - 1;
+      if (gap >= 6 && (!best || gap > best.gap)) best = { player: p, gap, since: sessions[idx[k - 1]].date };
+    }
+    return best;
+  }
+
   function renderHighlights(players, sessions) {
     const el = $('#highlightsGrid');
     const recentWindow = Math.min(10, sessions.length);
@@ -294,14 +335,10 @@
 
     const streak = topBy(players, (p) => p.currentStreak, { minValue: 1 });
     const recent = topBy(players, (p) => p.last10, { minValue: 1 });
-    // Assumption: new member = first appearance within last 12 sessions.
-    const newMemberPool = players
-      .map((p) => ({
-        ...p,
-        firstIdx: sessions.findIndex((s) => s.date === p.firstAttendanceDate),
-      }))
-      .filter((p) => p.firstIdx >= Math.max(0, sessions.length - 12));
-    const bestNewMember = topBy(newMemberPool, (p) => p.last10, { minValue: 1 });
+    const bestNewMember = topBy(newcomers(players, sessions), (p) => p.totalAttended, { minValue: 1 });
+    const returned = bestReturn(players, sessions);
+    // needs 20 sessions in view, or "the 10 before" isn't a fair comparison
+    const rising = topBy(sessions.length >= 20 ? players.filter((p) => p.improveDelta > 0) : [], (p) => p.improveDelta, { minValue: 2 });
 
     // Assumption: comeback watch = meaningful prior contributor (8+ sessions) absent for last 6 sessions.
     const comebackPool = players
@@ -321,9 +358,20 @@
     const active = recent.leaders.length
       ? { main: `${formatNames(recent.leaders.map((p) => p.playerName))} — ${recent.value}/${recentWindow || 10}`, sub: 'Setting the pace in recent sessions.' }
       : (fallback.active || { main: 'No current candidate', sub: 'Try widening the date filter.' });
-    const newMemberCard = bestNewMember.leaders.length
-      ? { main: `${formatNames(bestNewMember.leaders.map((p) => p.playerName))} — ${bestNewMember.value}/${recentWindow || 10}`, sub: 'Strong early momentum since joining.' }
-      : (fallback.newMember || { main: 'No current candidate', sub: 'No eligible recent joiner in this range.' });
+    // Third card: a real newcomer if there is one; otherwise the best return, otherwise who is on the rise.
+    const thirdCard = (() => {
+      if (bestNewMember.leaders.length) {
+        const p = bestNewMember.leaders[0];
+        return { title: '🌱 Newest Face', main: `${formatNames(bestNewMember.leaders.map((x) => x.playerName))} — ${bestNewMember.value} game${bestNewMember.value === 1 ? '' : 's'} so far`, sub: `First game ${formatDate(p.firstEver)}. Welcome to the group.` };
+      }
+      if (returned) {
+        return { title: '🙌 Welcome Back', main: `${returned.player.playerName} — back after ${returned.gap} sessions away`, sub: `Last played ${formatDate(returned.since)} before returning.` };
+      }
+      if (rising.leaders.length) {
+        return { title: '📈 On the Rise', main: `${formatNames(rising.leaders.map((p) => p.playerName))} — +${rising.value} games`, sub: 'Last 10 sessions compared with the 10 before.' };
+      }
+      return { title: '🌱 Newest Face', main: 'Nobody new lately', sub: `No first-timers in the last ${NEWCOMER_DAYS} days. Bring a friend!` };
+    })();
     const comebackCard = (() => {
       if (comeback) {
         const missingWeeks = latestDate ? Math.max(1, Math.round(daysBetween(latestDate, comeback.lastAttendanceDate) / 7)) : 0;
@@ -338,7 +386,7 @@
     const cards = [
       { title: '🔥 Hot Streak', ...hot },
       { title: '🎯 Most Active (Last 10)', ...active },
-      { title: '🌱 Best New Member', ...newMemberCard },
+      thirdCard,
       { title: '👀 Comeback Watch', ...comebackCard },
     ];
 
@@ -369,10 +417,6 @@
     const latestDate = baselineSessions[latestIndex]?.date;
     const streak = topBy(baselinePlayers, (p) => p.currentStreak, { minValue: 1 });
     const recent = topBy(baselinePlayers, (p) => p.last10, { minValue: 1 });
-    const newMemberPool = baselinePlayers
-      .map((p) => ({ ...p, firstIdx: baselineSessions.findIndex((s) => s.date === p.firstAttendanceDate) }))
-      .filter((p) => p.firstIdx >= Math.max(0, baselineSessions.length - 12));
-    const bestNewMember = topBy(newMemberPool, (p) => p.last10, { minValue: 1 });
     const comebackPool = baselinePlayers
       .map((p) => ({ ...p, lastSeenIdx: baselineSessions.findIndex((s) => s.date === p.lastAttendanceDate) }))
       .filter((p) => p.totalAttended >= 8 && p.lastSeenIdx >= 0 && (latestIndex - p.lastSeenIdx) >= 6)
@@ -389,10 +433,6 @@
         main: `${formatNames(recent.leaders.map((p) => p.playerName))} — ${recent.value}/${recentWindow || 10}`,
         sub: 'Setting the pace in recent sessions.',
       } : null,
-      newMember: bestNewMember.leaders.length ? {
-        main: `${formatNames(bestNewMember.leaders.map((p) => p.playerName))} — ${bestNewMember.value}/${recentWindow || 10}`,
-        sub: 'Strong early momentum since joining.',
-      } : null,
       comeback: comeback ? {
         main: `${comeback.playerName} — Missing for ${missingWeeks} week${missingWeeks === 1 ? '' : 's'}`,
         sub: `Last seen ${formatDate(comeback.lastAttendanceDate)}. Ready for a return.`,
@@ -407,10 +447,7 @@
     const improvedPool = hasHistory20 ? players.filter((p) => p.improveDelta > 0) : [];
     const mostImproved = topBy(improvedPool, (p) => p.improveDelta, { minValue: 1 });
     const mostConsistent = topBy(players.filter((p) => p.totalAttended >= 8), (p) => Number((p.attendanceRate * 100).toFixed(1)), { minValue: 1 });
-    const bestNewMemberPool = players
-      .map((p) => ({ ...p, firstIdx: sessions.findIndex((s) => s.date === p.firstAttendanceDate) }))
-      .filter((p) => p.firstIdx >= Math.max(0, sessions.length - 12));
-    const bestNewMemberAward = topBy(bestNewMemberPool, (p) => p.last10, { minValue: 1 });
+    const bestNewMemberAward = topBy(newcomers(players, sessions), (p) => p.totalAttended, { minValue: 1 });
 
     // Assumption: Fast Starter = best attendance in first 5 sessions after joining, later joiners only.
     const fastStarterPool = players.map((p) => {
@@ -460,8 +497,8 @@
       {
         name: 'Best New Member',
         winner: formatNames(bestNewMemberAward.leaders.map((p) => p.playerName)),
-        stat: bestNewMemberAward.leaders.length ? `${bestNewMemberAward.value}/10 recent` : '—',
-        note: 'Strong early impact with steady momentum.',
+        stat: bestNewMemberAward.leaders.length ? `${bestNewMemberAward.value} games since joining` : '—',
+        note: `Most games among players who joined in the last ${NEWCOMER_DAYS} days.`,
       },
       {
         name: 'Quiet Contributor',
@@ -477,7 +514,8 @@
       },
     ];
 
-    el.innerHTML = awards.map((a) => `
+    // An award nobody qualifies for is left out, not shown as a blank card.
+    el.innerHTML = awards.filter((a) => a.winner && a.winner !== '—').map((a) => `
       <article class="award-card">
         <div class="award-name">${a.name}</div>
         <div class="award-winner">${a.winner}</div>
