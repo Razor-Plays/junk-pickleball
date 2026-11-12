@@ -389,3 +389,50 @@ textarea { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px sol
 .avatar.big { width: 64px; height: 64px; font-size: 30px; box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--accent); }
 .profile-name { font-size: 28px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
 .profile-sub { color: var(--muted); font-size: 14px; margin-top: 3px; }
+
+/* ---------- Monthly Tab ---------- */
+.tab-head {
+  margin: -14px -16px 14px; padding: 16px 16px 14px;
+  background: var(--cream) url(hero-strokes.svg) center / 100% 100% no-repeat;
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme="dark"] .tab-head { background: var(--card); border-bottom-color: var(--line); }
+.tab-title {
+  font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); text-align: center;
+}
+.tab-head .month-nav { margin: 2px 0 6px; }
+.month-name { text-align: center; line-height: 1.05; }
+.month-name strong { display: block; font-size: 30px; font-weight: 800; }
+.month-name span { font-size: 14px; color: var(--muted); font-weight: 700; }
+.tab-sub { text-align: center; color: var(--muted); font-size: 13px; }
+.collect { margin: 12px auto 0; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow); }
+.collect-line { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.collect .bar { height: 10px; margin-top: 8px; }
+.collect .bar > i { background: var(--good); }
+
+.tab-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; border-top: 1px solid var(--line); }
+.tab-name {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  border: 0; background: none; padding: 4px 0; text-align: left; cursor: pointer;
+}
+.tab-name .name { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.tab-name .note { color: var(--muted); font-size: 12px; }
+.tab-group { padding: 8px 14px 4px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); font-weight: 700; }
+.row-icon {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: transparent; color: var(--accent-ink);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.row-icon svg { width: 18px; height: 18px; }
+.tick-badge {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--card);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #fff; cursor: pointer; padding: 0;
+}
+span.tick-badge { cursor: default; }
+.tick-badge.on { background: var(--good); border-color: var(--good); }
+:root[data-theme="dark"] .tick-badge.on { color: #071E2B; }
+.tick-badge.changed { background: var(--warn-bg); border-color: var(--accent); color: var(--accent-ink); }
+.tab-foot { margin-top: 14px; font-size: 14px; }
+.foot-line { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.foot-check { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; text-align: center; }
+.foot-check:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.btn.compact svg { width: 15px; height: 15px; vertical-align: -2px; }

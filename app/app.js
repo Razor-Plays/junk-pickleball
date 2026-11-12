@@ -70,6 +70,7 @@
     bell: '<svg class="bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none"/></svg>',
     chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.5-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.5 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/></svg>',
+    send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3 10 14"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>',
   };
 
@@ -564,145 +565,108 @@
       state.month = months.includes(current) ? current : (months[months.length - 1] || current);
     }
     const st = PB.monthStatement(d, state.month);
-    const s = d.settings;
-
     // Members of the group get a read-only view: no buttons that change or send anything,
     // and (enforced by the sheet script, not just here) no paybacks or kitty.
     const ro = d.role === 'member';
-    const paidPill = (entry, amount) => {
-      if (ro) return entry.paid ? '<span class="pill paid">✓ Paid</span>' : '<span class="pill">Not paid yet</span>';
-      const changed = entry.paid && Math.abs(entry.paid.amount - amount) > 0.01;
-      return `
-      <button class="pill ${entry.paid ? (changed ? 'warn' : 'paid') : ''}" style="border:0;cursor:pointer" data-action="toggle-paid"
-        data-person="${esc(entry.name)}" data-amount="${amount}" data-paid="${entry.paid ? 1 : 0}">
-        ${entry.paid ? (changed ? `Paid ${money(entry.paid.amount)} · bill changed` : '✓ Paid') : 'Mark paid'}</button>`;
-    };
+    const [monthWord, year] = PB.monthLabel(state.month).split(' ');
 
-    const owing = PB.outstanding(d, state.month);
+    // ---- header: where the month stands
+    const paidPlayers = st.players.filter((p) => p.paid);
+    const collected = PB.round2(paidPlayers.reduce((sum, p) => sum + p.total, 0));
+    const pct = st.totals.players ? Math.min(100, Math.round((collected / st.totals.players) * 100)) : 0;
+    const games = st.sessions.reduce((sum, x) => sum + x.heads, 0);
+    const header = `
+      <div class="tab-head">
+        <div class="tab-title">Monthly Tab</div>
+        <div class="month-nav">
+          <button data-action="month" data-delta="-1" aria-label="Previous month">‹</button>
+          <div class="month-name"><strong>${esc(monthWord)}</strong><span>${esc(year)}</span></div>
+          <button data-action="month" data-delta="1" aria-label="Next month">›</button>
+        </div>
+        ${st.sessions.length ? `
+        <div class="tab-sub">${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'} · ${games} games played · ${money(st.totals.courtCost)} of court</div>
+        ${st.players.length ? `
+        <div class="collect">
+          <div class="collect-line"><span>${ro ? `${paidPlayers.length} of ${st.players.length} paid` : `<b>${money(collected)}</b> of ${money(st.totals.players)} collected`}</span>
+            <span class="muted">${ro ? '' : `${paidPlayers.length}/${st.players.length} paid`}</span></div>
+          <div class="bar"><i style="width:${ro ? (st.players.length ? Math.round((paidPlayers.length / st.players.length) * 100) : 0) : pct}%"></i></div>
+        </div>` : ''}` : '<div class="tab-sub">No sessions this month.</div>'}
+      </div>`;
+
+    // ---- one row per person: name (opens their page), amount, and for admins the paid tick and a send button
+    const tick = (entry, amount) => {
+      if (ro) return entry.paid ? '<span class="tick-badge on" title="Paid">✓</span>' : '<span class="tick-badge" aria-hidden="true"></span>';
+      const changed = entry.paid && Math.abs(entry.paid.amount - amount) > 0.01;
+      const label = entry.paid ? (changed ? `Paid ${money(entry.paid.amount)}, but the bill has changed. Tap to unmark.` : 'Paid. Tap to unmark.') : 'Tap to mark paid';
+      return `<button class="tick-badge${entry.paid ? (changed ? ' changed' : ' on') : ''}" data-action="toggle-paid" data-person="${esc(entry.name)}"
+        data-amount="${amount}" data-paid="${entry.paid ? 1 : 0}" aria-label="${esc(entry.name)}: ${label}" title="${label}">${entry.paid ? (changed ? '!' : '✓') : ''}</button>`;
+    };
+    const send = (entry, kind) => (ro ? '' : `<button class="row-icon" data-action="${kind}" data-person="${esc(entry.name)}" aria-label="Send ${esc(entry.name)} their ${kind === 'send-member' ? 'payback' : 'bill'}" title="Send on WhatsApp">${ICON.send}</button>`);
+    const row = (entry, note, amount, amountText, kind, neg = false) => `
+      <div class="tab-row">
+        <button class="tab-name" data-action="open-player" data-name="${esc(entry.name)}">
+          <span class="name">${esc(entry.name)}</span>${note ? `<span class="note">${note}</span>` : ''}
+        </button>
+        <span class="amount ${neg ? 'neg' : ''}">${amountText}</span>
+        ${kind ? send(entry, kind) : ''}
+        ${tick(entry, amount)}
+      </div>`;
+
+    const isOpen = (key) => store.get(`jpb.open.${key}`) !== '0';
+    const regulars = st.players.filter((p) => !p.isGuest);
+    const visitors = st.players.filter((p) => p.isGuest);
+    const playerRow = (p) => row(p,
+      p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : '', p.total, money(p.total), 'send-player');
+    const playersTable = st.players.length ? `
+      <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Players <span class="count">· ${paidPlayers.length}/${st.players.length} paid</span></span>
+          <span class="amount">${money(st.totals.players)}</span></summary>
+        ${regulars.map(playerRow).join('')}
+        ${visitors.length ? `<div class="tab-group">Guests paying their own way</div>${visitors.map(playerRow).join('')}` : ''}
+        <div class="glance-row total"><span class="name">${ro ? 'Players\' court fees' : 'Total to collect'}</span><span class="amount">${money(st.totals.players)}</span></div>
+      </details>` : '';
+
+    const memberFees = PB.round2(st.members.reduce((sum, m) => sum + m.charges, 0));
+    const shownMembers = ro ? st.members.filter((m) => m.charges > 0) : st.members;
+    const membersTable = shownMembers.length ? `
+      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· ${ro ? 'court fees' : `payback from ${esc(d.settings.pay_to || 'Tommy')}`}</span></span>
+          <span class="amount">${money(ro ? memberFees : st.totals.payback)}</span></summary>
+        ${shownMembers.map((m) => (ro
+          ? row(m, m.guests.length ? `incl. ${m.guests.map((g) => esc(g.name)).join(', ')}` : '', m.charges, money(m.charges), '')
+          : row(m, `booked ${money(m.credits)} − fees ${money(m.charges)}`, m.payback,
+            m.payback < 0 ? `owes ${money(-m.payback)}` : money(m.payback), 'send-member', m.payback < 0))).join('')}
+        <div class="glance-row total"><span class="name">${ro ? 'Members\' court fees' : 'Total payback'}</span><span class="amount">${money(ro ? memberFees : st.totals.payback)}</span></div>
+      </details>` : '';
+
+    // ---- things to sort out before sending (admins)
+    const warnings = st.warnings.length && !ro
+      ? `<div class="warn-box"><b>Check before sending</b><ul>${st.warnings.map((w) => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : '';
+    const owing = ro ? [] : PB.outstanding(d, state.month);
     const owingBox = owing.length ? `<div class="warn-box"><b>Still unpaid from earlier months</b><ul>${
       owing.map((o) => `<li>${esc(o.name)} — ${money(o.amount)} (${esc(PB.monthLabel(o.month))})</li>`).join('')}</ul></div>` : '';
 
-    const itemList = (items) => `<details class="items"><summary>${items.length} line${items.length === 1 ? '' : 's'}</summary><ul>${
-      items.map((i) => `<li>${esc(PB.dayLabel(i.date))}: ${
-        i.kind === 'booking' ? `booked ${i.hours}h (+${money(i.amount)})`
-          : i.kind === 'guest' ? `guest ${esc(i.who)} ${money(i.amount)}` : money(i.amount)}</li>`).join('')}</ul></details>`;
-
-    const guestNote = (entry) => entry.guests.map((g) => `${esc(g.name)} ${money(g.amount)}`).join(', ');
-    const playerCard = (p) => `
-      <div class="card" data-card="${esc(p.name)}">
-        <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(p.name)}">${esc(p.name)}</button>${p.isGuest ? ' <span class="pill">guest</span>' : ''}</div>
-            <div class="sub">${p.games} game${p.games === 1 ? '' : 's'}${p.guests.length ? ` · incl. ${guestNote(p)}` : ''}</div></div>
-          <div class="amount">${money(p.total)}</div>
-        </div>
-        ${itemList(p.items)}
-        <div class="btn-row" style="margin-top:8px">
-          ${paidPill(p, p.total)}
-          ${ro ? '' : `<button class="btn ghost" data-action="send-player" data-person="${esc(p.name)}">Send bill</button>`}
-          <button class="btn ghost" data-action="open-player" data-name="${esc(p.name)}">History</button>
-        </div>
-      </div>`;
-    const regularCards = st.players.filter((p) => !p.isGuest).map(playerCard).join('');
-    const guestCards = st.players.filter((p) => p.isGuest).map(playerCard).join('');
-
-    const memberCards = ro ? st.members.filter((m) => m.charges > 0).map((m) => `
-      <div class="card" data-card="${esc(m.name)}">
-        <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(m.name)}">${esc(m.name)}</button> <span class="tag muted small">member</span></div>
-            <div class="sub">${m.games} game${m.games === 1 ? '' : 's'}${m.guests.length ? ` · incl. ${guestNote(m)}` : ''}</div></div>
-          <div class="amount">${money(m.charges)}</div>
-        </div>
-        ${itemList(m.items)}
-      </div>`).join('') : st.members.map((m) => `
-      <div class="card" data-card="${esc(m.name)}">
-        <div class="row" style="padding:0;border:0">
-          <div class="grow"><div class="title"><button class="name-link" data-action="open-player" data-name="${esc(m.name)}">${esc(m.name)}</button> <span class="tag muted small">member</span></div>
-            <div class="sub">booked ${money(m.credits)} − court fees ${money(m.charges)}${m.guests.length ? ` (incl. ${guestNote(m)})` : ''}</div></div>
-          <div class="amount ${m.payback < 0 ? 'neg' : ''}">${m.payback < 0 ? 'owes ' + money(-m.payback) : money(m.payback)}</div>
-        </div>
-        ${itemList(m.items)}
-        <div class="btn-row" style="margin-top:8px">
-          ${paidPill(m, m.payback)}
-          <button class="btn ghost" data-action="send-member" data-person="${esc(m.name)}">Send payback</button>
-        </div>
-      </div>`).join('');
-
+    // ---- small print at the bottom
     const r = st.reclub;
-    const warnings = st.warnings.length && !ro
-      ? `<div class="warn-box"><b>Check before sending</b><ul>${st.warnings.map((w) => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : '';
-
-    const paidCount = st.players.filter((p) => p.paid).length;
-
-    // The month at a glance: one line per person, like the old Monthly Bill tab.
-    const isOpen = (key) => store.get(`jpb.open.${key}`) !== '0';
-    const glanceRow = (name, note, amount, paid, neg = false) => `
-      <button class="glance-row" data-action="open-player" data-name="${esc(name)}">
-        <span class="name">${esc(name)}${note ? `<span class="note">${note}</span>` : ''}</span>
-        ${paid ? '<span class="tick">✓ paid</span>' : ''}
-        <span class="amount ${neg ? 'neg' : ''}">${amount}</span>
-      </button>`;
-    const playersGlance = st.players.length ? `
-      <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Players <span class="count">· ${paidCount}/${st.players.length} paid</span></span>
-          <span class="amount">${money(st.totals.players)}</span></summary>
-        ${st.players.map((p) => glanceRow(p.name,
-          [p.isGuest ? 'guest' : '', p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : ''].filter(Boolean).join(' · '),
-          money(p.total), p.paid)).join('')}
-        <div class="glance-row total"><span class="name">Total to collect</span><span class="amount">${money(st.totals.players)}</span></div>
-      </details>` : '';
-    const memberFees = PB.round2(st.members.reduce((sum, m) => sum + m.charges, 0));
-    const membersGlance = ro ? (memberFees > 0 ? `
-      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· court fees</span></span>
-          <span class="amount">${money(memberFees)}</span></summary>
-        ${st.members.filter((m) => m.charges > 0).map((m) => glanceRow(m.name,
-          m.guests.length ? `incl. ${m.guests.map((g) => esc(g.name)).join(', ')}` : '', money(m.charges), false)).join('')}
-        <div class="glance-row total"><span class="name">Members' court fees</span><span class="amount">${money(memberFees)}</span></div>
-      </details>` : '') : st.members.length ? `
-      <details class="glance" data-glance="members" ${isOpen('members') ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Members <span class="count">· payback</span></span>
-          <span class="amount">${money(st.totals.payback)}</span></summary>
-        ${st.members.map((m) => glanceRow(m.name, `booked ${money(m.credits)} − fees ${money(m.charges)}`,
-          m.payback < 0 ? `owes ${money(-m.payback)}` : money(m.payback), m.paid, m.payback < 0)).join('')}
-        <div class="glance-row total"><span class="name">Total payback</span><span class="amount">${money(st.totals.payback)}</span></div>
-      </details>` : '';
+    const footer = st.sessions.length ? `
+      <div class="card tab-foot">
+        ${r ? (ro
+          ? `<div class="foot-line"><span>${r.heads} Reclub player${r.heads === 1 ? '' : 's'}</span><span class="amount">${money(r.courtShare)}</span></div>`
+          : `<div class="foot-line"><span>Reclub: ${r.heads} player${r.heads === 1 ? '' : 's'} × ${money(d.settings.reclub_fee)}</span><span class="amount">${money(r.income)}</span></div>
+             <div class="foot-line muted"><span>Their share of court cost</span><span class="amount">−${money(r.courtShare)}</span></div>
+             <div class="foot-line"><b>Into the kitty</b><span class="amount">${money(r.profit)}</span></div>`) : ''}
+        ${ro ? '' : `<div class="foot-check">${st.totals.balanced ? '✓ Every court dollar is accounted for' : '⚠ Totals don\'t match the court cost'}${Math.abs(st.totals.roundingDiff) >= 0.01 ? ` (rounding ${money(st.totals.roundingDiff)})` : ''}</div>`}
+      </div>` : '';
 
     return `
-      <div class="month-nav">
-        <button data-action="month" data-delta="-1" aria-label="Previous month">‹</button>
-        <strong>${esc(PB.monthLabel(state.month))}</strong>
-        <button data-action="month" data-delta="1" aria-label="Next month">›</button>
-      </div>
-      ${st.sessions.length ? '' : '<div class="empty">No sessions this month.</div>'}
+      ${header}
       ${warnings}
       ${owingBox}
-      ${st.sessions.length ? `
-      <div class="stats">
-        <div class="stat"><div class="label">${ro ? 'Players\' court fees' : 'Collect from players'}</div><div class="value">${money(st.totals.players)}</div></div>
-        ${ro ? `<div class="stat"><div class="label">Members' court fees</div><div class="value">${money(memberFees)}</div></div>`
-          : `<div class="stat"><div class="label">Pay back to members</div><div class="value">${money(st.totals.payback)}</div></div>`}
-        <div class="stat"><div class="label">Court cost (${st.sessions.length} sessions)</div><div class="value">${money(st.totals.courtCost)}</div></div>
-        <div class="stat"><div class="label">Players paid</div><div class="value">${paidCount}/${st.players.length}</div></div>
-      </div>` : ''}
-
-      ${playersGlance}
-      ${membersGlance}
+      ${playersTable}
+      ${membersTable}
       ${st.sessions.length && !ro ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
-
-      ${regularCards ? `<h2>Regulars — details</h2>${regularCards}` : ''}
-      ${guestCards ? `<h2>Guests paying their own way — details</h2>${guestCards}` : ''}
-      ${memberCards ? `<h2>Members — details</h2>${memberCards}` : ''}
-      ${r && ro ? `<h2>Reclub</h2>
-        <div class="card">
-          <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub player${r.heads === 1 ? '' : 's'}</div><div class="amount">${money(r.courtShare)}</div></div>
-        </div>` : ''}
-      ${r && !ro ? `<h2>Reclub</h2>
-        <div class="card">
-          <div class="row" style="padding:0;border:0"><div class="grow">${r.heads} Reclub players × ${money(d.settings.reclub_fee)}</div><div class="amount">${money(r.income)}</div></div>
-          <div class="row" style="padding:4px 0 0;border:0"><div class="grow muted">Their share of court cost</div><div class="amount">−${money(r.courtShare)}</div></div>
-          <div class="row" style="padding:4px 0 0;border:0"><div class="grow"><b>Into the kitty</b></div><div class="amount">${money(r.profit)}</div></div>
-        </div>` : ''}
-      ${st.sessions.length ? `<p class="small muted center">Check: ${st.totals.balanced ? '✓ every court dollar is allocated' : '⚠ totals don\'t match court cost'}${Math.abs(st.totals.roundingDiff) >= 0.01 ? ` (rounding ${money(st.totals.roundingDiff)})` : ''}</p>` : ''}`;
+      ${!ro && st.players.length ? '<p class="small muted center" style="margin:8px 0 0">Tap a name for their games and history. Tap the circle when they\'ve paid.</p>' : ''}
+      ${footer}`;
   }
 
   // ------------------------------------------------------------ Club tab
@@ -870,6 +834,7 @@
               <summary><span class="chev" aria-hidden="true"></span><span class="grow">${esc(monthName(m.month))} <span class="count">· ${m.games} game${m.games === 1 ? '' : 's'}</span></span>
                 ${m.paid ? '<span class="tick small">✓ paid</span>' : ''}<span class="amount">${money(m.fees)}</span></summary>
               ${m.items.map(line).join('')}
+              ${admin ? `<div class="glance-row" style="cursor:default"><button class="btn ghost compact" data-action="${h.isMember ? 'send-member' : 'send-player'}" data-person="${esc(name)}" data-month="${m.month}">${ICON.send} Send ${esc(monthName(m.month))} ${h.isMember ? 'payback' : 'bill'}</button></div>` : ''}
             </details>`).join('')}`).join('')}
         ${h.isMember ? '<p class="small muted center">Court fees for a member come off their booking, so there is nothing to pay.</p>' : ''}
       </div>`;
@@ -1038,26 +1003,18 @@
       case 'month': state.month = PB.shiftMonth(state.month, Number(t.dataset.delta)); render(); break;
       case 'toggle-paid': {
         const paid = t.dataset.paid !== '1';
-        save('setPaid', { month: state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount), paid_on: todayISO() },
+        save('setPaid', { month: t.dataset.month || state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount), paid_on: todayISO() },
           paid ? `${t.dataset.person} marked paid` : 'Unmarked').then(render);
         break;
       }
       case 'send-player': case 'send-member': {
-        const st = PB.monthStatement(d, state.month);
+        const month = t.dataset.month || state.month;
+        const st = PB.monthStatement(d, month);
         const p = d.players.find((x) => x.name === t.dataset.person);
         const entry = (a === 'send-player' ? st.players : st.members).find((x) => x.name === t.dataset.person);
         if (!entry) return;
-        const text = a === 'send-player' ? PB.playerMessage(entry, state.month, d.settings) : PB.memberMessage(entry, state.month, d.settings);
+        const text = a === 'send-player' ? PB.playerMessage(entry, month, d.settings) : PB.memberMessage(entry, month, d.settings);
         sendText(text, p && p.phone);
-        break;
-      }
-      case 'jump-card': {
-        const card = [...document.querySelectorAll('#view .card[data-card]')].find((c) => c.dataset.card === t.dataset.person);
-        if (card) {
-          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          card.classList.add('flash');
-          setTimeout(() => card.classList.remove('flash'), 1500);
-        }
         break;
       }
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
