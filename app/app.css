@@ -437,3 +437,17 @@ span.tick-badge { cursor: default; }
 .foot-check { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; text-align: center; }
 .foot-check:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .btn.compact svg { width: 15px; height: 15px; vertical-align: -2px; }
+
+/* ---------- The Clubhouse ---------- */
+.club-head { text-align: center; padding: 20px 18px 16px; }
+.club-title { font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--ink); }
+.club-intro {
+  margin: 8px auto 0; max-width: 340px; font-size: 14.5px; line-height: 1.45; color: var(--ink);
+  background: rgba(255, 246, 229, .88); border-radius: 12px; padding: 6px 10px;
+}
+:root[data-theme="dark"] .club-intro { background: transparent; color: var(--muted); }
+.club-chips { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.club-chips span {
+  background: var(--navy); color: var(--cream); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 700;
+}
+:root[data-theme="dark"] .club-chips span { background: var(--blue-soft); color: var(--ink); }

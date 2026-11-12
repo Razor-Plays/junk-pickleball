@@ -681,12 +681,24 @@
 
   // ------------------------------------------------------------ Club tab
 
+  // Banner at the top of the Club tab, for everyone.
+  function clubHead(d) {
+    const people = d.players.filter((p) => p.active).length;
+    const played = d.sessions.filter((s) => s.date < todayISO()).length;
+    return `
+      <div class="tab-head club-head">
+        <div class="club-title"><span aria-hidden="true">🏓</span> The Clubhouse</div>
+        <p class="club-intro">Your home for all things Junk Pickleball. Find your name to explore your playing history, attendance and monthly fees.</p>
+        <div class="club-chips"><span>${people} players</span><span>${played} sessions played</span></div>
+      </div>`;
+  }
+
   function renderClub() {
     const d = state.data;
     if (d.role === 'member') {
       const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
       return `
-        <div class="card"><b>🥒 Good to see you!</b><div class="small muted">Friends, a plastic ball with holes in it, and the occasional dodgy line call. Tap your name to see your sessions and fees.</div></div>
+        ${clubHead(d)}
         <h2>Players <span class="pill">${names.length}</span></h2>
         <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
         <h2>More</h2>
@@ -699,6 +711,7 @@
     const players = [...d.players].sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name));
 
     return `
+      ${clubHead(d)}
       <h2>Membership hours</h2>
       <div class="list">
         ${balances.map((b) => {
