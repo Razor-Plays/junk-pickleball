@@ -454,27 +454,30 @@ span.tick-badge { cursor: default; }
 
 /* ---------- link to the stats page (member Club tab) ---------- */
 .brag-card {
-  display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff;
-  margin: 2px 0 6px; padding: 14px 14px 14px 12px; border-radius: 18px;
+  display: block; text-decoration: none; color: #fff;
+  margin: 2px 0 6px; padding: 14px 14px 14px; border-radius: 18px;
   background:
     radial-gradient(120% 160% at 100% 0%, rgba(255, 200, 61, .45) 0%, rgba(255, 200, 61, 0) 55%),
     linear-gradient(120deg, #F2581C 0%, #FF6729 55%, #FF8A3D 100%);
   box-shadow: 0 6px 18px rgba(242, 88, 28, .35);
 }
 .brag-card:active { transform: scale(.99); }
+.brag-top { display: flex; align-items: center; gap: 12px; }
 .brag-trophy {
-  flex: none; width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, .22);
-  display: inline-flex; align-items: center; justify-content: center; font-size: 28px;
+  flex: none; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, .22);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 27px;
 }
-.brag-card .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.brag-title { font-size: 20px; font-weight: 800; letter-spacing: .01em; }
-.brag-sub { font-size: 13.5px; line-height: 1.35; opacity: .95; }
-.brag-go {
-  flex: none; width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #F2581C;
-  display: inline-flex; align-items: center; justify-content: center;
+.brag-top .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.brag-eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .9; }
+.brag-title { font-size: 22px; font-weight: 800; line-height: 1.1; }
+.brag-sub { font-size: 13px; opacity: .95; margin-top: 2px; }
+.brag-teasers {
+  display: flex; flex-direction: column; gap: 4px; margin: 12px 0;
+  background: rgba(7, 30, 43, .18); border-radius: 12px; padding: 8px 10px; font-size: 13.5px;
 }
-.brag-go svg { width: 18px; height: 18px; stroke-width: 2.6; }
-
-.row-chev { flex: none; display: inline-flex; align-self: center; color: var(--muted); }
-.row-chev svg { width: 15px; height: 15px; }
-button.chip { font: inherit; }
+.brag-button {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: #fff; color: #C2410C; border-radius: 999px; padding: 11px 14px;
+  font-weight: 800; font-size: 15px; box-shadow: 0 2px 6px rgba(7, 30, 43, .18);
+}
+.brag-button svg { width: 18px; height: 18px; stroke-width: 2.8; }
