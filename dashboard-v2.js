@@ -362,13 +362,13 @@
     const thirdCard = (() => {
       if (bestNewMember.leaders.length) {
         const p = bestNewMember.leaders[0];
-        return { title: '🌱 Newest Face', main: `${formatNames(bestNewMember.leaders.map((x) => x.playerName))} — ${bestNewMember.value} game${bestNewMember.value === 1 ? '' : 's'} so far`, sub: `First game ${formatDate(p.firstEver)}. Welcome to the group.` };
+        return { title: '🌱 Newest Face', main: `${formatNames(bestNewMember.leaders.map((x) => x.playerName))} — ${bestNewMember.value} session${bestNewMember.value === 1 ? '' : 's'} so far`, sub: `First session ${formatDate(p.firstEver)}. Welcome to the group.` };
       }
       if (returned) {
         return { title: '🙌 Welcome Back', main: `${returned.player.playerName} — back after ${returned.gap} sessions away`, sub: `Last played ${formatDate(returned.since)} before returning.` };
       }
       if (rising.leaders.length) {
-        return { title: '📈 On the Rise', main: `${formatNames(rising.leaders.map((p) => p.playerName))} — +${rising.value} games`, sub: 'Last 10 sessions compared with the 10 before.' };
+        return { title: '📈 On the Rise', main: `${formatNames(rising.leaders.map((p) => p.playerName))} — +${rising.value} sessions`, sub: 'Last 10 sessions compared with the 10 before.' };
       }
       return { title: '🌱 Newest Face', main: 'Nobody new lately', sub: `No first-timers in the last ${NEWCOMER_DAYS} days. Bring a friend!` };
     })();
@@ -497,7 +497,7 @@
       {
         name: 'Best New Member',
         winner: formatNames(bestNewMemberAward.leaders.map((p) => p.playerName)),
-        stat: bestNewMemberAward.leaders.length ? `${bestNewMemberAward.value} games since joining` : '—',
+        stat: bestNewMemberAward.leaders.length ? `${bestNewMemberAward.value} sessions since joining` : '—',
         note: `Most games among players who joined in the last ${NEWCOMER_DAYS} days.`,
       },
       {

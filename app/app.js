@@ -574,7 +574,12 @@
     const paidPlayers = st.players.filter((p) => p.paid);
     const collected = PB.round2(paidPlayers.reduce((sum, p) => sum + p.total, 0));
     const pct = st.totals.players ? Math.min(100, Math.round((collected / st.totals.players) * 100)) : 0;
-    const games = st.sessions.reduce((sum, x) => sum + x.heads, 0);
+    // People, not visits: everyone who played this month, with guests counted separately.
+    const regularsThisMonth = new Set();
+    let guestVisits = 0;
+    for (const x of st.sessions) for (const a of x.attendance) { if (a.guest) guestVisits += 1; else regularsThisMonth.add(a.name); }
+    // Fees are invoiced once the month is over, so the current month isn't due yet.
+    const inProgress = state.month >= todayISO().slice(0, 7);
     const header = `
       <div class="tab-head">
         <div class="tab-title">Monthly Tab</div>
@@ -584,8 +589,13 @@
           <button data-action="month" data-delta="1" aria-label="Next month">›</button>
         </div>
         ${st.sessions.length ? `
-        <div class="tab-sub">${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'} · ${games} games played · ${money(st.totals.courtCost)} of court</div>
-        ${st.players.length ? `
+        <div class="tab-sub">${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'} · ${regularsThisMonth.size} player${regularsThisMonth.size === 1 ? '' : 's'}${guestVisits ? ` + ${guestVisits} guest visit${guestVisits === 1 ? '' : 's'}` : ''} · ${money(st.totals.courtCost)} court cost</div>
+        ${inProgress && st.players.length ? `
+        <div class="collect pending">
+          <div class="collect-line"><span><b>Month in progress</b></span><span class="muted">${money(st.totals.players)} so far</span></div>
+          <div class="small muted" style="margin-top:4px">Court fees are worked out and sent at the end of ${esc(monthWord)}.</div>
+        </div>` : ''}
+        ${!inProgress && st.players.length ? `
         <div class="collect">
           <div class="collect-line"><span>${ro ? `${paidPlayers.length} of ${st.players.length} paid` : `<b>${money(collected)}</b> of ${money(st.totals.players)} collected`}</span>
             <span class="muted">${ro ? '' : `${paidPlayers.length}/${st.players.length} paid`}</span></div>
@@ -619,11 +629,11 @@
       p.guests.length ? `incl. ${p.guests.map((g) => esc(g.name)).join(', ')}` : '', p.total, money(p.total), 'send-player');
     const playersTable = st.players.length ? `
       <details class="glance" data-glance="players" ${isOpen('players') ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Players <span class="count">· ${paidPlayers.length}/${st.players.length} paid</span></span>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Players <span class="count">· ${inProgress ? 'so far' : `${paidPlayers.length}/${st.players.length} paid`}</span></span>
           <span class="amount">${money(st.totals.players)}</span></summary>
         ${regulars.map(playerRow).join('')}
         ${visitors.length ? `<div class="tab-group">Guests paying their own way</div>${visitors.map(playerRow).join('')}` : ''}
-        <div class="glance-row total"><span class="name">${ro ? 'Players\' court fees' : 'Total to collect'}</span><span class="amount">${money(st.totals.players)}</span></div>
+        <div class="glance-row total"><span class="name">${ro ? 'Players\' court fees' : inProgress ? 'Running total' : 'Total to collect'}</span><span class="amount">${money(st.totals.players)}</span></div>
       </details>` : '';
 
     const memberFees = PB.round2(st.members.reduce((sum, m) => sum + m.charges, 0));
@@ -664,8 +674,8 @@
       ${owingBox}
       ${playersTable}
       ${membersTable}
-      ${st.sessions.length && !ro ? '<button class="btn secondary block" data-action="send-group">Share summary with the group</button>' : ''}
-      ${!ro && st.players.length ? '<p class="small muted center" style="margin:8px 0 0">Tap a name for their games and history. Tap the circle when they\'ve paid.</p>' : ''}
+      ${st.sessions.length && !ro ? `<button class="btn secondary block" data-action="send-group">${inProgress ? 'Share the running total with the group' : 'Share summary with the group'}</button>` : ''}
+      ${!ro && st.players.length ? '<p class="small muted center" style="margin:8px 0 0">Tap a name for their sessions and history. Tap the circle when they\'ve paid.</p>' : ''}
       ${footer}`;
   }
 
@@ -676,7 +686,7 @@
     if (d.role === 'member') {
       const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
       return `
-        <div class="card"><b>🥒 Good to see you!</b><div class="small muted">Friends, a plastic ball with holes in it, and the occasional dodgy line call. Tap your name to see your games and fees.</div></div>
+        <div class="card"><b>🥒 Good to see you!</b><div class="small muted">Friends, a plastic ball with holes in it, and the occasional dodgy line call. Tap your name to see your sessions and fees.</div></div>
         <h2>Players <span class="pill">${names.length}</span></h2>
         <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
         <h2>More</h2>
@@ -773,7 +783,7 @@
     render();
   }
 
-  // One person's page: headline numbers, games per month, and every month's bill.
+  // One person's page: headline numbers, sessions per month, and every month's bill.
   function openPlayer(name) {
     const d = state.data;
     const h = PB.playerHistory(d, name);
@@ -794,7 +804,7 @@
     const facts = [
       h.totalSessions ? `Played ${h.games} of the ${h.totalSessions} sessions since joining (${share}%)` : '',
       h.favouriteDay ? `Usually a ${({ Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' })[h.favouriteDay]} player` : '',
-      h.busiestMonth && h.busiestMonth.games > 1 ? `Busiest month: ${PB.monthLabel(h.busiestMonth.month)} (${h.busiestMonth.games} games)` : '',
+      h.busiestMonth && h.busiestMonth.games > 1 ? `Busiest month: ${PB.monthLabel(h.busiestMonth.month)} (${h.busiestMonth.games} sessions)` : '',
       h.favouritePlace ? `Most often at ${esc(h.favouritePlace)}` : '',
     ].filter(Boolean);
     const line = (i) => `<div class="glance-row" style="cursor:default"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
@@ -812,26 +822,26 @@
           </div>
         </div>
         <div class="stats">
-          <div class="stat"><div class="label">Games played</div><div class="value">${h.games}</div></div>
-          <div class="stat"><div class="label">First game</div><div class="value">${h.first ? esc(PB.dayLabel(h.first, true).slice(4)) : '—'}</div></div>
+          <div class="stat"><div class="label">Sessions played</div><div class="value">${h.games}</div></div>
+          <div class="stat"><div class="label">First session</div><div class="value">${h.first ? esc(PB.dayLabel(h.first, true).slice(4)) : '—'}</div></div>
           <div class="stat"><div class="label">Court fees, all time</div><div class="value">${money(h.fees)}</div></div>
-          <div class="stat"><div class="label">Average per game</div><div class="value">${h.games ? money(h.perGame) : '—'}</div></div>
+          <div class="stat"><div class="label">Average per session</div><div class="value">${h.games ? money(h.perGame) : '—'}</div></div>
         </div>
         ${facts.length ? `<div class="card facts">${facts.map((f) => `<div>${f}</div>`).join('')}</div>` : ''}
 
-        <h2>Games per month</h2>
+        <h2>Sessions per month</h2>
         <div class="card">
-          <div class="spark" role="img" aria-label="Games played in each of the last 12 months">
-            ${span.map((m) => { const g = (byMonth.get(m) || { games: 0 }).games; return `<div class="col" title="${esc(PB.monthLabel(m))}: ${g} game${g === 1 ? '' : 's'}"><span class="n">${g || ''}</span><i style="height:${Math.round((g / peak) * 100)}%"></i><span class="m">${esc(monthName(m).slice(0, 1))}</span></div>`; }).join('')}
+          <div class="spark" role="img" aria-label="Sessions played in each of the last 12 months">
+            ${span.map((m) => { const g = (byMonth.get(m) || { games: 0 }).games; return `<div class="col" title="${esc(PB.monthLabel(m))}: ${g} session${g === 1 ? '' : 's'}"><span class="n">${g || ''}</span><i style="height:${Math.round((g / peak) * 100)}%"></i><span class="m">${esc(monthName(m).slice(0, 1))}</span></div>`; }).join('')}
           </div>
           <div class="small muted center">${esc(PB.monthLabel(span[0]))} to ${esc(PB.monthLabel(end))}</div>
         </div>
 
         ${h.years.map((y) => `
-          <h2>${y.year} <span class="pill">${y.games} game${y.games === 1 ? '' : 's'} · ${money(y.fees)}</span></h2>
+          <h2>${y.year} <span class="pill">${y.games} session${y.games === 1 ? '' : 's'} · ${money(y.fees)}</span></h2>
           ${y.months.map((m) => `
             <details class="glance">
-              <summary><span class="chev" aria-hidden="true"></span><span class="grow">${esc(monthName(m.month))} <span class="count">· ${m.games} game${m.games === 1 ? '' : 's'}</span></span>
+              <summary><span class="chev" aria-hidden="true"></span><span class="grow">${esc(monthName(m.month))} <span class="count">· ${m.games} session${m.games === 1 ? '' : 's'}</span></span>
                 ${m.paid ? '<span class="tick small">✓ paid</span>' : ''}<span class="amount">${money(m.fees)}</span></summary>
               ${m.items.map(line).join('')}
               ${admin ? `<div class="glance-row" style="cursor:default"><button class="btn ghost compact" data-action="${h.isMember ? 'send-member' : 'send-player'}" data-person="${esc(name)}" data-month="${m.month}">${ICON.send} Send ${esc(monthName(m.month))} ${h.isMember ? 'payback' : 'bill'}</button></div>` : ''}
