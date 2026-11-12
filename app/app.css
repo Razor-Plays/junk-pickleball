@@ -451,3 +451,26 @@ span.tick-badge { cursor: default; }
   background: var(--navy); color: var(--cream); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 700;
 }
 :root[data-theme="dark"] .club-chips span { background: var(--blue-soft); color: var(--ink); }
+
+/* ---------- link to the stats page (member Club tab) ---------- */
+.brag-card {
+  display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff;
+  margin: 2px 0 6px; padding: 14px 14px 14px 12px; border-radius: 18px;
+  background:
+    radial-gradient(120% 160% at 100% 0%, rgba(255, 200, 61, .45) 0%, rgba(255, 200, 61, 0) 55%),
+    linear-gradient(120deg, #F2581C 0%, #FF6729 55%, #FF8A3D 100%);
+  box-shadow: 0 6px 18px rgba(242, 88, 28, .35);
+}
+.brag-card:active { transform: scale(.99); }
+.brag-trophy {
+  flex: none; width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, .22);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 28px;
+}
+.brag-card .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.brag-title { font-size: 20px; font-weight: 800; letter-spacing: .01em; }
+.brag-sub { font-size: 13.5px; line-height: 1.35; opacity: .95; }
+.brag-go {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #F2581C;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.brag-go svg { width: 18px; height: 18px; stroke-width: 2.6; }
