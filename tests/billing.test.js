@@ -300,3 +300,10 @@ test('unpaid months: every month after tracking starts counts, even one with no 
   // November has no payment rows at all but still counts; Ann is a member who played without booking, so she owes
   assert.deepEqual(owing, ['2026-10 Dan', '2026-11 Dan', '2026-11 Ann', '2026-12 Dan']);
 });
+
+test("a member's page lists their bookings without counting them as fees", () => {
+  const h = PB.playerHistory(mixed, 'Ann');
+  const dec = h.months[0];
+  assert.deepEqual(dec.items.map((i) => [i.kind, i.amount]), [['booking', 280], ['self', 40], ['guest', 40]]);
+  assert.deepEqual([dec.games, dec.fees, h.games, h.fees], [1, 80, 1, 80]);
+});

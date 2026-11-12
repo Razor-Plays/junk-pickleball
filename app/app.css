@@ -474,3 +474,7 @@ span.tick-badge { cursor: default; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .brag-go svg { width: 18px; height: 18px; stroke-width: 2.6; }
+
+.row-chev { flex: none; display: inline-flex; align-self: center; color: var(--muted); }
+.row-chev svg { width: 15px; height: 15px; }
+button.chip { font: inherit; }

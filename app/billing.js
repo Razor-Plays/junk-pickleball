@@ -229,6 +229,13 @@
     const sessions = [...data.sessions].sort((a, b) => a.date.localeCompare(b.date));
     for (const s of sessions) {
       const sum = PB.sessionSummary(data, s, idx);
+      // A member's own bookings, so their page explains their payback. Not a fee.
+      for (const b of sum.bookings) {
+        if (b.member !== name) continue;
+        month(PB.monthOf(s.date)).items.push({
+          date: s.date, session: s.id, amount: round2(b.hours * b.rate), location: s.location, kind: 'booking', hours: b.hours,
+        });
+      }
       for (const a of sum.attendance) {
         const played = a.name === name;
         const pays = (a.pays || a.name) === name;
