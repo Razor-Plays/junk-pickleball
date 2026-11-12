@@ -699,10 +699,16 @@
       const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
       return `
         ${clubHead(d)}
+        <a class="brag-card" href="../" target="_blank" rel="noopener">
+          <span class="brag-trophy" aria-hidden="true">🏆</span>
+          <span class="grow">
+            <span class="brag-title">Bragging Rights</span>
+            <span class="brag-sub">Hot streaks, awards and the all-time greats. Who's on fire this month?</span>
+          </span>
+          <span class="brag-go" aria-hidden="true">${ICON.chevron}</span>
+        </a>
         <h2>Players <span class="pill">${names.length}</span></h2>
         <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
-        <h2>More</h2>
-        <div class="card"><a class="btn secondary" href="../" target="_blank" rel="noopener">Open stats page</a></div>
         <p class="small muted center">Loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
           <button class="btn ghost small" data-action="sign-out">Sign out on this device</button></p>`;
     }
