@@ -751,67 +751,99 @@
     }
     const balances = PB.membershipBalances(d);
     const kitty = PB.kitty(d);
-    const players = [...d.players].sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name));
+    const active = d.players.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
+    const inactive = d.players.filter((p) => !p.active).sort((a, b) => a.name.localeCompare(b.name));
+    const low = balances.filter((b) => b.purchased && b.left <= 8);
+    const loaded = esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16));
+
+    // A foldable section; each phone remembers which ones are open.
+    const section = (key, title, summary, body, openByDefault) => {
+      const saved = store.get(`jpb.open.${key}`);
+      const open = saved === null ? openByDefault : saved !== '0';
+      return `
+      <details class="club-section" data-glance="${key}" ${open ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow"><span class="club-section-title">${title}</span>
+          ${summary ? `<span class="club-section-sum">${summary}</span>` : ''}</span></summary>
+        <div class="club-section-body">${body}</div>
+      </details>`;
+    };
+
+    const playerRow = (p) => `
+      <button class="row${p.active ? '' : ' faded'}" data-action="open-player" data-name="${esc(p.name)}" data-search="${esc(p.name.toLowerCase())}">
+        <div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div>
+          ${p.phone || !p.active ? `<div class="sub">${p.active ? '' : 'inactive'}${p.phone ? `${p.active ? '' : ' · '}${esc(p.phone)}` : ''}</div>` : ''}</div>
+        ${ICON.chevron}
+      </button>`;
+
+    const membership = section('club-hours', 'Membership Balance',
+      low.length ? `<span class="low-note">Low: ${low.map((b) => `${esc(b.name)} ${b.left}h`).join(', ')}</span>` : `${balances.length} members`, `
+        <div class="list">
+          ${balances.map((b) => {
+            const pct = b.purchased ? Math.max(0, Math.min(100, (b.left / b.purchased) * 100)) : 0;
+            const isLow = b.purchased && b.left <= 8;
+            return `<div class="row"><div class="grow">
+                <div class="title">${esc(b.name)}${b.active ? '' : ' <span class="muted small">(inactive)</span>'}</div>
+                <div class="sub">used ${b.used}h of ${b.purchased}h · ${b.currentRate ? money(b.currentRate) : '—'}/h</div>
+                <div class="bar ${isLow ? 'low' : ''}"><i style="width:${pct}%"></i></div>
+              </div><div class="hours-left${isLow ? ' low' : ''}${b.left <= 0 ? ' out' : ''}"><b>${b.left}h</b><span>left</span></div></div>`;
+          }).join('') || '<div class="row muted">No memberships yet.</div>'}
+        </div>
+        <button class="btn ghost" data-action="add-membership">＋ Record a membership purchase</button>`, true);
+
+    const kittyBox = section('club-kitty', 'Kitty Balance', `<b class="${kitty.balance < 0 ? 'neg' : ''}">${money(kitty.balance)}</b>`, `
+        <div class="card">
+          <div class="foot-line"><span>Reclub profit, all time</span><span class="amount">${money(kitty.reclubProfit)}</span></div>
+          <div class="foot-line"><span>Spending</span><span class="amount">${money(kitty.entriesTotal)}</span></div>
+          <div class="foot-line kitty-total"><b>Balance</b><span class="amount ${kitty.balance < 0 ? 'neg' : ''}">${money(kitty.balance)}</span></div>
+          ${kitty.entries.length ? `<details class="items"><summary>${kitty.entries.length} spending entr${kitty.entries.length === 1 ? 'y' : 'ies'}</summary><ul>${kitty.entries.map((k) =>
+            `<li>${esc(k.date)} ${esc(k.description)} ${money(k.amount)} <button class="btn ghost small" data-action="delete-kitty" data-id="${esc(k.id)}">remove</button></li>`).join('')}</ul></details>` : ''}
+          <button class="btn ghost" data-action="add-kitty">＋ Add spending (balls etc.)</button>
+        </div>`, true);
+
+    const playersBox = section('club-players', 'Players', `${active.length} active${inactive.length ? ` · ${inactive.length} inactive` : ''}`, `
+        <input type="search" id="pSearch" placeholder="Find a player" autocomplete="off" style="margin-bottom:8px" />
+        <div class="list" id="playerList">
+          ${active.map(playerRow).join('')}
+          ${inactive.length ? `<div class="tab-group">Inactive</div>${inactive.map(playerRow).join('')}` : ''}
+        </div>
+        <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>`, false);
+
+    const shareBox = section('club-share', 'Share &amp; Access', 'invite links', `
+        <div class="card">
+          <p class="small" style="margin-top:0">A link signs a phone in with one tap.</p>
+          <div class="share-line"><div><b>Admin link</b><div class="small muted">Full access. Only for the people who run the club.</div></div>
+            <button class="btn secondary compact" data-action="share-invite">Send</button></div>
+          ${d.settings.member_code ? `<div class="share-line"><div><b>Member link</b><div class="small muted">Look only: sessions, who played and court fees. No paybacks, hours or kitty.</div></div>
+            <button class="btn secondary compact" data-action="share-member-invite">Send</button></div>` : ''}
+          <p class="small muted" style="margin-bottom:0">The codes live in the sheet's <b>Settings</b> tab (<i>access_code</i> and <i>member_code</i>). Change one there to cut off old links, then send a new one.</p>
+        </div>`, false);
+
+    const settingsBox = section('club-settings', 'Settings', 'club details and pricing', `
+        <div class="card">
+          <div class="settings-group">Club</div>
+          <label class="field"><span>Club name</span><input type="text" id="sClub" value="${esc(d.settings.club_name)}" /></label>
+          <label class="field"><span>Who collects money</span><input type="text" id="sPayTo" value="${esc(d.settings.pay_to)}" /></label>
+          <label class="field"><span>Currency symbol</span><input type="text" id="sCur" value="${esc(d.settings.currency)}" /></label>
+          <label class="field"><span>Places we play (one per line, most used first)</span>
+            <textarea id="sPlaces" rows="4">${esc(PB.locations(d).join('\n'))}</textarea></label>
+          <label class="field"><span>Public stats page (first names and dates played only — no money)</span><select id="sStats">
+            <option value="TRUE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? ' selected' : ''}>On — anyone with the link can see it</option>
+            <option value="FALSE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? '' : ' selected'}>Off</option></select></label>
+          <div class="settings-group">Pricing</div>
+          <label class="field"><span>Default court rate per hour (used when a member has no membership on file)</span><input type="number" inputmode="decimal" id="sRate" value="${esc(d.settings.default_rate)}" /></label>
+          <label class="field"><span>Reclub fee per player (new sessions)</span><input type="number" inputmode="decimal" id="sReclub" value="${esc(d.settings.reclub_fee)}" /></label>
+          <button class="btn block" data-action="save-settings">Save settings</button>
+        </div>`, false);
 
     return `
       ${clubHead(d)}
-      <h2>Membership hours</h2>
-      <div class="list">
-        ${balances.map((b) => {
-          const pct = b.purchased ? Math.max(0, Math.min(100, (b.left / b.purchased) * 100)) : 0;
-          return `<div class="row"><div class="grow">
-              <div class="title">${esc(b.name)}${b.active ? '' : ' <span class="muted small">(inactive)</span>'}</div>
-              <div class="sub">${b.used}h used of ${b.purchased}h · rate ${b.currentRate ? money(b.currentRate) : '—'}/h</div>
-              <div class="bar ${b.left <= 8 ? 'low' : ''}"><i style="width:${pct}%"></i></div>
-            </div><div class="amount ${b.left <= 0 ? 'neg' : ''}">${b.left}h left</div></div>`;
-        }).join('') || '<div class="row muted">No memberships yet.</div>'}
-      </div>
-      <button class="btn ghost" data-action="add-membership">＋ Record a membership purchase</button>
-
-      <h2>Kitty</h2>
-      <div class="card">
-        <div class="row" style="padding:0;border:0"><div class="grow"><b>Balance</b></div><div class="amount ${kitty.balance < 0 ? 'neg' : ''}">${money(kitty.balance)}</div></div>
-        <div class="sub muted small">Reclub profit ${money(kitty.reclubProfit)} · spending ${money(kitty.entriesTotal)}</div>
-        ${kitty.entries.length ? `<details class="items"><summary>${kitty.entries.length} entries</summary><ul>${kitty.entries.map((k) =>
-          `<li>${esc(k.date)} ${esc(k.description)} ${money(k.amount)} <button class="btn ghost small" data-action="delete-kitty" data-id="${esc(k.id)}">remove</button></li>`).join('')}</ul></details>` : ''}
-        <button class="btn ghost" data-action="add-kitty">＋ Add spending (balls etc.)</button>
-      </div>
-
-      <h2>Players</h2>
-      <div class="list">
-        ${players.map((p) => `
-          <button class="row" data-action="open-player" data-name="${esc(p.name)}">
-            <div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div>
-              <div class="sub">${p.active ? 'active' : 'inactive'}${p.phone ? ' · ' + esc(p.phone) : ''}</div></div>
-            ${ICON.chevron}
-          </button>`).join('')}
-      </div>
-      <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>
-
-      <h2>Settings</h2>
-      <div class="card">
-        <label class="field"><span>Club name</span><input type="text" id="sClub" value="${esc(d.settings.club_name)}" /></label>
-        <label class="field"><span>Default court rate per hour (used when a member has no membership on file)</span><input type="number" inputmode="decimal" id="sRate" value="${esc(d.settings.default_rate)}" /></label>
-        <label class="field"><span>Reclub fee per player (new sessions)</span><input type="number" inputmode="decimal" id="sReclub" value="${esc(d.settings.reclub_fee)}" /></label>
-        <label class="field"><span>Who collects money</span><input type="text" id="sPayTo" value="${esc(d.settings.pay_to)}" /></label>
-        <label class="field"><span>Currency symbol</span><input type="text" id="sCur" value="${esc(d.settings.currency)}" /></label>
-        <label class="field"><span>Places we play (one per line, most used first)</span>
-          <textarea id="sPlaces" rows="4">${esc(PB.locations(d).join('\n'))}</textarea></label>
-        <label class="field"><span>Public stats page (first names and dates played only — no money)</span><select id="sStats">
-          <option value="TRUE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? ' selected' : ''}>On — anyone with the link can see it</option>
-          <option value="FALSE"${String(d.settings.public_stats).toUpperCase() === 'TRUE' ? '' : ' selected'}>Off</option></select></label>
-        <button class="btn" data-action="save-settings">Save settings</button>
-      </div>
-      <h2>Share</h2>
-      <div class="card">
-        <p class="small muted" style="margin-top:0">A link signs a phone in with one tap. The <b>admin link</b> gives full access, so only send it to people who run the club. The <b>member link</b> is look-only: sessions, who played and bills, with no paybacks, membership hours or kitty.</p>
-        <div class="btn-row">
-          <button class="btn secondary" data-action="share-invite">Send admin link</button>
-          ${d.settings.member_code ? '<button class="btn secondary" data-action="share-member-invite">Send member link</button>' : ''}
-          <a class="btn ghost" href="../" target="_blank" rel="noopener">Open stats page</a>
-        </div>
-      </div>
-      <p class="small muted center">Data from the Google Sheet · loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
+      ${bragCard(d)}
+      ${membership}
+      ${kittyBox}
+      ${playersBox}
+      ${shareBox}
+      ${settingsBox}
+      <p class="small muted center">Data from the Google Sheet · loaded ${loaded}<br>
         <button class="btn ghost small" data-action="sign-out">Sign out on this device</button></p>`;
   }
 
@@ -1132,6 +1164,13 @@
     const key = ev.target && ev.target.dataset ? ev.target.dataset.glance : '';
     if (key) store.set(`jpb.open.${key}`, ev.target.open ? '1' : '0');
   }, true);
+
+  // Club tab: filter the player list as you type (no re-render, so the keyboard stays up).
+  document.addEventListener('input', (ev) => {
+    if (ev.target.id !== 'pSearch') return;
+    const q = ev.target.value.trim().toLowerCase();
+    document.querySelectorAll('#playerList [data-search]').forEach((r) => { r.hidden = !!q && !r.dataset.search.includes(q); });
+  });
 
   document.addEventListener('input', (ev) => {
     const dr = state.draft;
