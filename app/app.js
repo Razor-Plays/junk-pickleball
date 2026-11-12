@@ -308,16 +308,25 @@
   // ------------------------------------------------------------ Session editor
 
   // Read-only look at one session, for the member view.
-  function viewSession(id) {
+  // One session in full: where, courts, cost, who played and what each paid.
+  // `back` reopens the page you came from (e.g. a player's page).
+  function viewSession(id, back = null) {
     const d = state.data;
     const s = d.sessions.find((x) => x.id === id);
     if (!s) return;
+    const admin = d.role !== 'member';
     const sum = PB.sessionSummary(d, s);
     const players = sum.attendance.filter((a) => !a.guest);
     const guests = sum.attendance.filter((a) => a.guest);
+    state.sheetBack = back;
+    const booked = admin ? sum.bookings.filter((b) => b.member !== PB.COURTS) : [];
     const el = $('#sheet');
     el.innerHTML = `
-      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(PB.dayLabel(s.date, true))}</h3></div>
+      <div class="sheet-head">
+        <button class="btn ghost" data-action="${back ? 'sheet-back' : 'close-sheet'}">${back ? '‹ Back' : 'Close'}</button>
+        <h3>${esc(PB.dayLabel(s.date, true))}</h3>
+        ${admin ? `<button class="btn ghost" data-action="edit-session" data-id="${esc(s.id)}">Edit</button>` : ''}
+      </div>
       <div class="sheet-body">
         ${s.location ? `<p class="place big">${ICON.pin}${esc(s.location)}</p>` : ''}
         <div class="stats">
@@ -326,8 +335,12 @@
           <div class="stat"><div class="label">Players</div><div class="value">${sum.heads || '—'}</div></div>
           <div class="stat"><div class="label">Each</div><div class="value">${sum.heads ? money(sum.cpp) : '—'}</div></div>
         </div>
+        ${sum.heads ? `<p class="small muted center" style="margin:-2px 0 4px">${money(sum.cost)} court cost ÷ ${sum.heads} player${sum.heads === 1 ? '' : 's'} = ${money(sum.cpp)} each</p>` : ''}
+        ${booked.length ? `<h2>Courts booked on</h2>
+        <div class="list">${booked.map((b) => `<div class="row"><div class="grow"><div class="title">${esc(b.member)}'s membership</div>
+          <div class="sub">${b.hours} court-hour${b.hours === 1 ? '' : 's'} × ${money(b.rate)}</div></div><span class="amount">${money(b.hours * b.rate)}</span></div>`).join('')}</div>` : ''}
         ${sum.heads ? `<h2>Who played <span class="pill">${players.length}</span></h2>
-        <div class="chips">${players.map((a) => `<span class="chip on">${esc(a.name)}</span>`).join('')}</div>` : '<div class="empty">Booked — players not entered yet.</div>'}
+        <div class="chips">${players.map((a) => `<button class="chip on" data-action="open-player" data-name="${esc(a.name)}">${esc(a.name)}</button>`).join('')}</div>` : '<div class="empty">Booked — players not entered yet.</div>'}
         ${guests.length ? `<h2>Guests <span class="pill">${guests.length}</span></h2>
         <div class="list">${guests.map((g) => `<div class="row"><div class="grow"><div class="title">${esc(g.name)}</div></div>
           <span class="muted small">${g.pays === 'Reclub' ? 'Reclub' : g.pays === g.name ? 'pays own way' : `with ${esc(g.pays)}`}</span></div>`).join('')}</div>` : ''}
@@ -826,9 +839,9 @@
       h.busiestMonth && h.busiestMonth.games > 1 ? `Busiest month: ${PB.monthLabel(h.busiestMonth.month)} (${h.busiestMonth.games} sessions)` : '',
       h.favouritePlace ? `Most often at ${esc(h.favouritePlace)}` : '',
     ].filter(Boolean);
-    const line = (i) => `<div class="glance-row" style="cursor:default"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
-      i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
-      <span class="amount${i.kind === 'hosted' ? ' muted' : ''}">${money(i.amount)}</span></div>`;
+    const line = (i) => `<button class="glance-row" data-action="view-session" data-id="${esc(i.session)}" data-from="${esc(name)}"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
+      i.kind === 'booking' ? `booked ${i.hours} court-hour${i.hours === 1 ? '' : 's'}` : i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
+      <span class="amount${i.kind === 'hosted' || i.kind === 'booking' ? ' muted' : ''}">${i.kind === 'booking' ? '+' : ''}${money(i.amount)}</span><span class="row-chev" aria-hidden="true">${ICON.chevron}</span></button>`;
     el.innerHTML = `
       <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(name)}</h3>
         ${admin && h.player ? `<button class="btn ghost" data-action="edit-player" data-name="${esc(name)}">Edit</button>` : ''}</div>
@@ -983,7 +996,13 @@
       case 'show-all': state.showAllSessions = true; render(); break;
       case 'new-session': openSession(null); break;
       case 'edit-session': openSession(t.dataset.id); break;
-      case 'close-sheet': closeSheet(); break;
+      case 'close-sheet': state.sheetBack = null; closeSheet(); break;
+      case 'sheet-back': { const fn = state.sheetBack; state.sheetBack = null; if (fn) fn(); else closeSheet(); break; }
+      case 'view-session': {
+        const from = t.dataset.from;
+        viewSession(t.dataset.id, from ? () => openPlayer(from) : null);
+        break;
+      }
       case 'hours': {
         const b = dr.bookings[t.dataset.member];
         b.hours = Math.max(0, (Number(b.hours) || 0) + Number(t.dataset.delta));
