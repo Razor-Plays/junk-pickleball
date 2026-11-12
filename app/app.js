@@ -694,6 +694,37 @@
 
   // ------------------------------------------------------------ Club tab
 
+  // A clear call to action for the stats page, with a live teaser so it's obviously stats.
+  function bragCard(d) {
+    const played = [...d.sessions].filter((x) => x.date < todayISO()).sort((x, y) => x.date.localeCompare(y.date));
+    const ids = new Set(played.map((x) => x.id));
+    const lastTen = new Set(played.filter((x) => d.attendance.some((a) => a.session_id === x.id)).slice(-10).map((x) => x.id));
+    const all = new Map(); const recent = new Map();
+    for (const a of d.attendance) {
+      if (a.guest || !ids.has(a.session_id)) continue;
+      all.set(a.name, (all.get(a.name) || 0) + 1);
+      if (lastTen.has(a.session_id)) recent.set(a.name, (recent.get(a.name) || 0) + 1);
+    }
+    const top = (m) => [...m.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0];
+    const most = top(all); const hot = top(recent);
+    return `
+        <a class="brag-card" href="../" target="_blank" rel="noopener" aria-label="Open the club stats page">
+          <div class="brag-top">
+            <span class="brag-trophy" aria-hidden="true">🏆</span>
+            <span class="grow">
+              <span class="brag-eyebrow">Club stats</span>
+              <span class="brag-title">Bragging Rights</span>
+              <span class="brag-sub">Leaderboard, streaks &amp; awards</span>
+            </span>
+          </div>
+          <div class="brag-teasers">
+            ${hot ? `<span>🔥 On fire: <b>${esc(hot[0])}</b> · ${hot[1]} of the last ${lastTen.size}</span>` : ''}
+            ${most ? `<span>🏅 Most sessions ever: <b>${esc(most[0])}</b> · ${most[1]}</span>` : ''}
+          </div>
+          <span class="brag-button">View club stats ${ICON.chevron}</span>
+        </a>`;
+  }
+
   // Banner at the top of the Club tab, for everyone.
   function clubHead(d) {
     const people = d.players.filter((p) => p.active).length;
@@ -712,14 +743,7 @@
       const names = [...d.players].filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
       return `
         ${clubHead(d)}
-        <a class="brag-card" href="../" target="_blank" rel="noopener">
-          <span class="brag-trophy" aria-hidden="true">🏆</span>
-          <span class="grow">
-            <span class="brag-title">Bragging Rights</span>
-            <span class="brag-sub">Hot streaks, awards and the all-time greats. Who's on fire this month?</span>
-          </span>
-          <span class="brag-go" aria-hidden="true">${ICON.chevron}</span>
-        </a>
+        ${bragCard(d)}
         <h2>Players <span class="pill">${names.length}</span></h2>
         <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
         <p class="small muted center">Loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
