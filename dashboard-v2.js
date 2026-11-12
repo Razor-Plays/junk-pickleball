@@ -1,6 +1,6 @@
 (() => {
   const SHEET_ID = '1pe2SvzjhPTlWaRfMWkuXmErbjPWHGIEraELYhZxgAHA';
-  const BUILD_TAG = '2026-11-11.2';
+  const BUILD_TAG = '2026-11-12.1';
   // The manager app's sheet API also serves an attendance-only feed (no money).
   const API_URL = (window.JPB_CONFIG && window.JPB_CONFIG.apiUrl) || '';
   const CSV_URL = (sheetName) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
@@ -37,17 +37,17 @@
     const el = $('#dataSourceStatus');
     el.classList.remove('live', 'snapshot', 'error');
     if (mode === 'loading') {
-      el.textContent = 'Data source: loading…';
+      el.textContent = 'Loading…';
       return;
     }
     if (mode === 'live') {
       el.classList.add('live');
-      el.textContent = 'Data source: Live Google Sheet';
+      el.textContent = 'Live from the club sheet · updated after every session';
       return;
     }
     if (mode === 'snapshot') {
       el.classList.add('snapshot');
-      el.textContent = detail ? `Data source: Local snapshot fallback (${detail})` : 'Data source: Local snapshot fallback';
+      el.textContent = detail ? `Showing a saved copy, not live (${detail})` : 'Showing a saved copy, not live';
       return;
     }
     el.classList.add('error');
@@ -673,13 +673,23 @@
     }
   }
 
+  // A session counts once its day is over (the day after it's played), matching
+  // when it moves from "Coming up" to "Past sessions" in the app.
+  function todayLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   async function loadApiData() {
-    const res = await fetch(`${API_URL}?view=stats`, { redirect: 'follow' });
+    const res = await fetch(`${API_URL}?view=stats&t=${Date.now()}`, { redirect: 'follow', cache: 'no-store' });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'stats feed unavailable');
+    const today = todayLocal();
+    const rows = (json.rows || []).filter((r) => String(r.session_date) < today);
+    const last = rows.reduce((m, r) => (r.session_date > m ? r.session_date : m), '');
     return {
-      attendanceRows: json.rows || [],
-      metaRows: json.last_session ? [{ last_sync_date: json.last_session }] : [],
+      attendanceRows: rows,
+      metaRows: last ? [{ last_sync_date: last }] : [],
       sourceMode: 'live',
     };
   }
