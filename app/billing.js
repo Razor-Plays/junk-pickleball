@@ -455,12 +455,15 @@
   };
 
   /**
-   * Unpaid bills from months before `month`. Only months where at least one
-   * payment was recorded count, so history from before payment tracking
+   * Unpaid bills from months before `month`, counting from the first month
+   * with any payment on record, so history from before payment tracking
    * started doesn't show up as a wall of debts.
    */
   PB.outstanding = (data, month) => {
-    const tracked = [...new Set(data.payments.map((p) => p.month))].filter((m) => m < month).sort();
+    const first = data.payments.map((p) => p.month).sort()[0];
+    const tracked = first
+      ? [...new Set(data.sessions.map((s) => PB.monthOf(s.date)))].filter((m) => m >= first && m < month).sort()
+      : [];
     const out = [];
     for (const m of tracked) {
       const st = PB.monthStatement(data, m);
@@ -516,13 +519,13 @@
 
   // "Jeremy: $106.91" lines, so a host knows what to collect from each guest.
   const guestShareLines = (entry, cur) => entry.guests.map((g) =>
-    `${g.name}${g.count > 1 ? ` (${g.count} games)` : ''}: ${PB.money(g.amount, cur)}`);
+    `${g.name}${g.count > 1 ? ` (${g.count} sessions)` : ''}: ${PB.money(g.amount, cur)}`);
 
   PB.playerMessage = (entry, month, settings) => {
     const cur = settings.currency || '$';
     const lines = entry.items.map((i) => `• ${describeItem(i, cur)}`);
     const shares = entry.guests.length
-      ? [`Your own games: ${PB.money(entry.own, cur)}`, ...guestShareLines(entry, cur)]
+      ? [`Your own sessions: ${PB.money(entry.own, cur)}`, ...guestShareLines(entry, cur)]
       : [];
     return [
       `Hi ${entry.name}! Your ${settings.club_name || 'pickleball'} court fees for ${PB.monthLabel(month)}:`,

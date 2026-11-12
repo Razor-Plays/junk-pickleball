@@ -235,9 +235,9 @@ test('group message: everyone on their own line, guests with their host, members
 test("a host's bill says what each guest's share is", () => {
   const st = PB.monthStatement(mixed, '2026-12');
   const msg = PB.playerMessage(st.players.find((p) => p.name === 'Cat'), '2026-12', mixed.settings);
-  assert.match(msg, /Your own games: \$110\.00\nJeremy \(2 games\): \$110\.00\nTotal: \$220\.00/);
+  assert.match(msg, /Your own sessions: \$110\.00\nJeremy \(2 sessions\): \$110\.00\nTotal: \$220\.00/);
   const own = PB.playerMessage(st.players.find((p) => p.name === 'Dan'), '2026-12', mixed.settings);
-  assert.equal(/Your own games/.test(own), false);
+  assert.equal(/Your own sessions/.test(own), false);
   assert.match(PB.memberMessage(st.members.find((m) => m.name === 'Ann'), '2026-12', mixed.settings), /Of which Milo: \$40\.00/);
 });
 
@@ -288,4 +288,15 @@ test('player history: months, totals and who paid', () => {
 test('locations come from settings, in order', () => {
   assert.deepEqual(PB.locations(PB.normalize({ settings: { locations: ' A | B |  | C ' } })), ['A', 'B', 'C']);
   assert.equal(PB.locations(PB.normalize({}))[0], 'Metro City Plaza Phase 3');
+});
+
+test('unpaid months: every month after tracking starts counts, even one with no payments yet', () => {
+  // payments recorded for October only; November and December have none yet
+  const d = PB.normalize({ ...raw,
+    sessions: [...raw.sessions, { id: 'd1', date: '2026-12-02', reclub_fee: 100 }],
+    bookings: [...raw.bookings, { session_id: 'd1', member: 'Ann', hours: 1, rate: 140 }],
+    attendance: [...raw.attendance, { session_id: 'd1', name: 'Dan', guest: 'FALSE', pays: 'Dan' }] });
+  const owing = PB.outstanding(d, '2027-01').map((o) => `${o.month} ${o.name}`);
+  // November has no payment rows at all but still counts; Ann is a member who played without booking, so she owes
+  assert.deepEqual(owing, ['2026-10 Dan', '2026-11 Dan', '2026-11 Ann', '2026-12 Dan']);
 });
