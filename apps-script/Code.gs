@@ -33,7 +33,7 @@ const TABS = {
   Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours'],
   Bookings: ['session_id', 'member', 'hours', 'rate'],
   Attendance: ['session_id', 'name', 'guest', 'pays'],
-  Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes', 'kind'],
+  Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes', 'kind', 'covers'],
   Payments: ['month', 'person', 'amount', 'paid_on', 'note'],
   Kitty: ['id', 'date', 'description', 'amount'],
   Settings: ['key', 'value'],
@@ -261,7 +261,7 @@ const ACTIONS = {
     });
   },
 
-  /** payload: { member, date, amount, rate, hours?, notes?, kind: 'purchase' | 'balance' } */
+  /** payload: { member, date, amount, rate, hours?, notes?, kind: 'purchase' | 'balance', covers? } */
   saveMembership: function (p) {
     const kind = p.kind === 'balance' ? 'balance' : 'purchase';
     if (!p.member) throw new Error('Choose a member');
@@ -273,6 +273,7 @@ const ACTIONS = {
       id: id, member: p.member, date: p.date || today_(), amount: Number(p.amount),
       hours: kind === 'balance' ? 0 : Number(p.hours || (rate ? Number(p.amount) / rate : 0)),
       rate: rate, notes: p.notes || (kind === 'balance' ? 'Court balance check' : ''), kind: kind,
+      covers: kind === 'balance' ? String(p.covers || '') : '',
     });
   },
 
