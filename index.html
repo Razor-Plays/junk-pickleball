@@ -86,7 +86,7 @@
     .core-list li{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
     .core-list li:last-child{border-bottom:none}
 
-    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
     .chart-card,.table-card{background:var(--panel);padding:14px;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
     .chart-card h3,.table-card h3{margin:0 0 10px;font-size:14px;color:var(--ink);font-weight:800}
     .chartbox{position:relative;width:100%;height:220px;min-height:180px}
@@ -132,7 +132,7 @@
     }
     @media(min-width:800px){
       .cards{grid-template-columns:repeat(4,minmax(0,1fr))}
-      .grid{grid-template-columns:1fr 1fr}
+      .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .table-card{grid-column:1 / -1}
       .top-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
       .award-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
