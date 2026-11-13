@@ -107,10 +107,34 @@
 
   // ------------------------------------------------------------ API
 
+  // A full-screen "working on it" card for anything that changes the sheet.
+  // Saves go through Google and take several seconds, so make that visible
+  // (and block extra taps while it happens).
+  const BUSY_TEXT = {
+    saveSession: 'Saving session…', deleteSession: 'Deleting session…', setPaid: 'Updating…',
+    savePlayer: 'Saving player…', saveMembership: 'Saving…', deleteMembership: 'Removing…',
+    saveKitty: 'Saving…', deleteKitty: 'Removing…', saveSettings: 'Saving settings…',
+  };
+  let busyTimer = null;
+  function showBusy(text) {
+    clearTimeout(busyTimer);
+    const el = $('#busy');
+    $('#busyText').textContent = text;
+    $('#busySub').textContent = '';
+    el.hidden = false;
+    // reassure on a slow connection
+    busyTimer = setTimeout(() => { $('#busySub').textContent = 'Still going… Google can take a few seconds.'; }, 6000);
+  }
+  function hideBusy() {
+    clearTimeout(busyTimer);
+    $('#busy').hidden = true;
+  }
+
   async function api(action, payload = {}) {
     if (!state.apiUrl) throw new Error('No API URL set');
     state.busy = true;
     $('[data-action="refresh"]').classList.add('spin');
+    if (action !== 'load') showBusy(BUSY_TEXT[action] || 'Saving…');
     try {
       // text/plain keeps this a "simple" request (no CORS preflight) for Apps Script.
       const res = await fetch(state.apiUrl, {
@@ -130,6 +154,7 @@
     } finally {
       state.busy = false;
       $('[data-action="refresh"]').classList.remove('spin');
+      hideBusy();
     }
   }
 
