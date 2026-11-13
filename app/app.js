@@ -130,11 +130,13 @@
     $('#busy').hidden = true;
   }
 
-  async function api(action, payload = {}) {
+  // quiet: save in the background (no saving screen), e.g. ticking someone paid.
+  async function api(action, payload = {}, { quiet = false } = {}) {
     if (!state.apiUrl) throw new Error('No API URL set');
-    state.busy = true;
+    if (!quiet) state.busy = true;
+    state.inFlight = (state.inFlight || 0) + 1;
     $('[data-action="refresh"]').classList.add('spin');
-    if (action !== 'load') showBusy(BUSY_TEXT[action] || 'Saving…');
+    if (action !== 'load' && !quiet) showBusy(BUSY_TEXT[action] || 'Saving…');
     try {
       // text/plain keeps this a "simple" request (no CORS preflight) for Apps Script.
       const res = await fetch(state.apiUrl, {
@@ -152,16 +154,27 @@
       setData(json.data);
       return json.data;
     } finally {
-      state.busy = false;
-      $('[data-action="refresh"]').classList.remove('spin');
-      hideBusy();
+      if (!quiet) { state.busy = false; hideBusy(); }
+      state.inFlight -= 1;
+      if (!state.inFlight) $('[data-action="refresh"]').classList.remove('spin');
     }
   }
 
+  // Paid ticks still on their way to the sheet. They're shown straight away and
+  // laid over any data that comes back until the sheet has them.
+  state.pendingPaid = [];
+  function applyPaid(raw, p) {
+    const payments = (raw.payments || []).filter((x) => !(String(x.month).slice(0, 7) === p.month && x.person === p.person));
+    if (p.paid) payments.push({ month: p.month, person: p.person, amount: p.amount, paid_on: p.paid_on, note: '' });
+    return { ...raw, payments };
+  }
+
   function setData(raw) {
+    state.serverRaw = raw;   // what the sheet last said
+    store.set(LS.cache, JSON.stringify(raw));
+    for (const p of state.pendingPaid) raw = applyPaid(raw, p);
     state.raw = raw;
     state.data = PB.normalize(raw);
-    store.set(LS.cache, JSON.stringify(raw));
     $('#clubName').textContent = state.data.settings.club_name || 'Junk Pickleball';
   }
 
@@ -465,13 +478,11 @@
     const sum = draftSummary();
     const scroll = el.scrollTop;
 
-    el.innerHTML = `
-      <div class="sheet-head">
-        <button class="btn ghost" data-action="close-sheet">Cancel</button>
-        <h3>${dr.isNew ? 'New session' : 'Edit session'}</h3>
-        ${dr.isNew ? '' : '<button class="btn danger" data-action="delete-session">Delete</button>'}
-      </div>
-      <div class="sheet-body">
+    // Before the day, the booking is what changes; from the day itself, it's who came.
+    // Uses the saved date, so the layout doesn't jump around while the date is being edited.
+    const savedDate = ((d.sessions.find((x) => x.id === dr.id)) || {}).date || '';
+    const gameDay = !dr.isNew && savedDate && savedDate <= todayISO();
+    const bookingBlock = `
         <label class="field"><span>Date</span>
           <input type="date" id="dDate" value="${esc(dr.date)}" />
         </label>
@@ -502,8 +513,8 @@
               </div>
             </div>`;
           }).join('') || '<div class="row muted">No members set up — add them in Club.</div>'}
-        </div>
-
+        </div>`;
+    const whoBlock = `
         <h2>Who played <span class="pill">${dr.players.length}</span></h2>
         <input type="search" id="dSearch" placeholder="Search players" value="${esc(dr.search)}" style="margin-bottom:10px" />
         ${grouped ? `
@@ -524,7 +535,16 @@
         <div class="btn-row">
           <button class="btn secondary" data-action="add-guest">＋ Guest</button>
           <button class="btn secondary" data-action="add-reclub">＋ Reclub player</button>
-        </div>
+        </div>`;
+
+    el.innerHTML = `
+      <div class="sheet-head">
+        <button class="btn ghost" data-action="close-sheet">Cancel</button>
+        <h3>${dr.isNew ? 'New session' : 'Edit session'}</h3>
+        ${dr.isNew ? '' : '<button class="btn danger" data-action="delete-session">Delete</button>'}
+      </div>
+      <div class="sheet-body">
+        ${gameDay ? `${whoBlock}<h2>Booking</h2>${bookingBlock}` : `${bookingBlock}${whoBlock}`}
 
         <label class="field" style="margin-top:16px"><span>Notes (optional)</span>
           <input type="text" id="dNotes" value="${esc(dr.notes)}" />
@@ -1196,8 +1216,23 @@
       case 'month': state.month = PB.shiftMonth(state.month, Number(t.dataset.delta)); render(); break;
       case 'toggle-paid': {
         const paid = t.dataset.paid !== '1';
-        save('setPaid', { month: t.dataset.month || state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount), paid_on: todayISO() },
-          paid ? `${t.dataset.person} marked paid` : 'Unmarked').then(render);
+        // Tick at once and save in the background, one after another, so several can be ticked quickly.
+        const p = { month: t.dataset.month || state.month, person: t.dataset.person, paid, amount: Number(t.dataset.amount), paid_on: todayISO() };
+        state.pendingPaid.push(p);
+        setData(state.serverRaw);
+        render();
+        state.paidQueue = (state.paidQueue || Promise.resolve()).then(async () => {
+          try {
+            await api('setPaid', p, { quiet: true });
+          } catch (e) {
+            handleError(e);
+            toast(`Couldn't save ${p.person}. Check and try again.`, true);
+          } finally {
+            state.pendingPaid = state.pendingPaid.filter((x) => x !== p);
+            setData(state.serverRaw);   // a failed tick drops back to what the sheet has
+            render();
+          }
+        });
         break;
       }
       case 'send-player': case 'send-member': {
