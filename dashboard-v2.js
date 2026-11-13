@@ -36,6 +36,8 @@
     state.dataSource = mode;
     const el = $('#dataSourceStatus');
     el.classList.remove('live', 'snapshot', 'error');
+    // Only show the line when something's off; live data needs no label.
+    el.hidden = mode === 'live';
     if (mode === 'loading') {
       el.textContent = 'Loading…';
       return;
@@ -549,7 +551,7 @@
         <div class="legacy-name">The backbone of the group</div>
         <ol class="core-list">
           ${core5.map((p, i) => {
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
+      const medal = ['🥇', '🥈', '🥉', '🎖️', '🎖️'][i];
       return `<li><span>${medal} ${p.playerName}</span><strong>${p.totalAttended}</strong></li>`;
     }).join('')}
         </ol>

@@ -361,8 +361,12 @@ function memberView_(data) {
     }),
     attendance: data.attendance,
     memberships: [],
-    payments: data.payments.filter(function (p) { return !isMember[p.person]; })
-      .map(function (p) { return { month: p.month, person: p.person, amount: p.amount, paid_on: p.paid_on }; }),
+    // Players' payments in full. For members only "settled": no payback amount or date.
+    payments: data.payments.map(function (p) {
+      return isMember[p.person]
+        ? { month: p.month, person: p.person, amount: '', paid_on: '' }
+        : { month: p.month, person: p.person, amount: p.amount, paid_on: p.paid_on };
+    }),
     kitty: [],
   };
 }

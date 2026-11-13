@@ -202,7 +202,8 @@ test('member code: read-only, and nothing private ever leaves the sheet', () => 
   assert.deepEqual([d.memberships, d.kitty], [[], []]);
   assert.deepEqual(d.players.map((p) => Object.keys(p).sort().join()), ['active,name,role', 'active,name,role']);
   assert.deepEqual(d.bookings, [{ session_id: 's1', member: 'Courts', hours: 2, rate: 140 }]);
-  assert.deepEqual(d.payments.map((p) => p.person), ['Cat']);           // no payback payments
+  // paybacks show as settled, without the amount or date
+  assert.deepEqual(d.payments.map((p) => [p.person, p.amount, p.person === 'Ann' ? p.paid_on : 'date']), [['Cat', 140, 'date'], ['Ann', '', '']]);
   // loaded_at is a timestamp whose milliseconds could look like one of the numbers below
   const text = JSON.stringify({ ...d, loaded_at: '' });
   for (const secret of ['555', 'private note', '11000', 'Balls', '55.5', '123', '210', gas.accessCode(), memberCode]) {
