@@ -346,6 +346,8 @@ details.glance .chev::before {
 details.glance[open] .chev::before { transform: rotate(45deg); margin-left: 0; margin-top: -3px; }
 details.glance > summary .grow { flex: 1; }
 details.glance > summary .count { font-weight: 400; color: var(--muted); font-size: 13px; }
+details.booking-fold { margin-top: 18px; }
+details.booking-fold .fold-body { padding: 0 14px 12px; }
 .glance-row {
   display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 7px 14px;
   border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer;
