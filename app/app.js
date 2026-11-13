@@ -544,7 +544,13 @@
         ${dr.isNew ? '' : '<button class="btn danger" data-action="delete-session">Delete</button>'}
       </div>
       <div class="sheet-body">
-        ${gameDay ? `${whoBlock}<h2>Booking</h2>${bookingBlock}` : `${bookingBlock}${whoBlock}`}
+        ${gameDay ? `${whoBlock}
+        <details class="glance booking-fold" data-fold="booking" ${dr.bookingOpen ? 'open' : ''}>
+          <summary><span class="chev" aria-hidden="true"></span><span class="grow">Booking
+            <span class="count">· ${esc(PB.dayLabel(dr.date).slice(4))}${dr.location ? ` · ${esc(dr.location)}` : ''} · ${esc(sum.label)}</span></span>
+            <span class="small muted">${dr.bookingOpen ? '' : 'Edit'}</span></summary>
+          <div class="fold-body">${bookingBlock}</div>
+        </details>` : `${bookingBlock}${whoBlock}`}
 
         <label class="field" style="margin-top:16px"><span>Notes (optional)</span>
           <input type="text" id="dNotes" value="${esc(dr.notes)}" />
@@ -1288,6 +1294,11 @@
   document.addEventListener('toggle', (ev) => {
     const key = ev.target && ev.target.dataset ? ev.target.dataset.glance : '';
     if (key) store.set(`jpb.open.${key}`, ev.target.open ? '1' : '0');
+    // the session editor's folded booking: remember it while the editor re-draws
+    if (ev.target && ev.target.dataset && ev.target.dataset.fold === 'booking' && state.draft) {
+      state.draft.bookingOpen = ev.target.open;
+      const hint = ev.target.querySelector('summary .small'); if (hint) hint.textContent = ev.target.open ? '' : 'Edit';
+    }
   }, true);
 
   // Club tab: filter the player list as you type (no re-render, so the keyboard stays up).
