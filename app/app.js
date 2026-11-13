@@ -348,7 +348,7 @@
     const el = $('#sheet');
     el.innerHTML = `
       <div class="sheet-head">
-        <button class="btn ghost" data-action="${back ? 'sheet-back' : 'close-sheet'}">${back ? '‹ Back' : 'Close'}</button>
+        <button class="btn ghost" data-action="${back ? 'sheet-back' : 'close-sheet'}">‹ Back</button>
         <h3>${esc(PB.dayLabel(s.date, true))}</h3>
         ${admin ? `<button class="btn ghost" data-action="edit-session" data-id="${esc(s.id)}">Edit</button>` : ''}
       </div>
@@ -631,7 +631,7 @@
         ${inProgress && st.players.length ? `
         <div class="collect pending">
           <div class="collect-line"><span><b>Month in progress</b></span><span class="muted">${money(st.totals.players)} so far</span></div>
-          <div class="small muted" style="margin-top:4px">Court fees are worked out and sent at the end of ${esc(monthWord)}.</div>
+          <div class="small muted" style="margin-top:4px">Final court fees are sent at the end of ${esc(monthWord)}.</div>
         </div>` : ''}
         ${!inProgress && st.players.length ? `
         <div class="collect">
@@ -943,7 +943,7 @@
       i.kind === 'booking' ? `booked ${i.hours} court-hour${i.hours === 1 ? '' : 's'}` : i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
       <span class="amount${i.kind === 'hosted' || i.kind === 'booking' ? ' muted' : ''}">${i.kind === 'booking' ? '+' : ''}${money(i.amount)}</span><span class="row-chev" aria-hidden="true">${ICON.chevron}</span></button>`;
     el.innerHTML = `
-      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Close</button><h3>${esc(name)}</h3>
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>${esc(name)}</h3>
         ${admin && h.player ? `<button class="btn ghost" data-action="edit-player" data-name="${esc(name)}">Edit</button>` : ''}</div>
       <div class="sheet-body">
         <div class="profile-head">
