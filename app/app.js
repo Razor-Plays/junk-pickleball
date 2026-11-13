@@ -1290,6 +1290,29 @@
     }
   });
 
+  // The phone's back button (Android) steps back out of a session, player page,
+  // stats or form instead of leaving the app. Each open sheet adds one history
+  // step; closing it with the on-screen button takes that step back off.
+  state.skipPop = false;
+  new MutationObserver(() => {
+    const open = !$('#sheet').hidden;
+    const marked = !!(history.state && history.state.jpbSheet);
+    if (open && !marked) history.pushState({ jpbSheet: 1 }, '');
+    else if (!open && marked) { state.skipPop = true; history.back(); }
+  }).observe($('#sheet'), { attributes: true, attributeFilter: ['hidden'] });
+  window.addEventListener('popstate', () => {
+    if (state.skipPop) { state.skipPop = false; return; }
+    if ($('#sheet').hidden) return;
+    const fn = state.sheetBack;
+    state.sheetBack = null;
+    if (fn) {
+      fn();   // e.g. from a session back to the player page it was opened from
+      if (!$('#sheet').hidden) history.pushState({ jpbSheet: 1 }, '');
+    } else {
+      closeSheet();
+    }
+  });
+
   // Remember which glance tables are folded away (the toggle event doesn't bubble).
   document.addEventListener('toggle', (ev) => {
     const key = ev.target && ev.target.dataset ? ev.target.dataset.glance : '';
