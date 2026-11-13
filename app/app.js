@@ -733,7 +733,7 @@
     const top = (m) => [...m.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0];
     const most = top(all); const hot = top(recent);
     return `
-        <a class="brag-card" href="../" target="_blank" rel="noopener" aria-label="Open the club stats page">
+        <a class="brag-card" href="../" data-action="open-stats" aria-label="Open the club stats page">
           <div class="brag-top">
             <span class="brag-trophy" aria-hidden="true">🏆</span>
             <span class="grow">
@@ -906,10 +906,26 @@
     });
   }
 
+  // The club stats page, shown inside the app. It's the same page as the public
+  // link, loaded into a frame, so there's only ever one version of it.
+  function openStats() {
+    const el = $('#sheet');
+    el.classList.add('stats-sheet');
+    el.innerHTML = `
+      <div class="sheet-head">
+        <button class="btn ghost" data-action="close-sheet">‹ Back</button>
+        <h3>Club stats</h3>
+      </div>
+      <iframe class="stats-frame" src="../" title="Club stats"></iframe>`;
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
   function closeSheet() {
     state.draft = null;
     const el = $('#sheet');
     el.hidden = true;
+    el.classList.remove('stats-sheet');
     el.innerHTML = '';
     document.body.style.overflow = '';
     render();
@@ -1091,6 +1107,7 @@
     }
     const t = ev.target.closest('[data-action]');
     if (!t) return;
+    if (t.tagName === 'A') ev.preventDefault();   // links with an action stay in the app
     const a = t.dataset.action;
     const dr = state.draft;
     const d = state.data;
@@ -1121,6 +1138,7 @@
       case 'new-session': openSession(null); break;
       case 'edit-session': openSession(t.dataset.id); break;
       case 'close-sheet': state.sheetBack = null; closeSheet(); break;
+      case 'open-stats': openStats(); break;
       case 'sheet-back': { const fn = state.sheetBack; state.sheetBack = null; if (fn) fn(); else closeSheet(); break; }
       case 'view-session': {
         const from = t.dataset.from;

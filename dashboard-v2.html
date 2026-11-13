@@ -145,7 +145,8 @@
 <body>
   <header>
     <img src="app/logo.svg" alt="Junk Pickleball" />
-    <a class="chip" href="app/">← Back to the app</a>
+    <a class="chip" id="backToApp" href="app/">← Back to the app</a>
+    <script>if (window.self !== window.top) document.getElementById('backToApp').style.display = 'none';</script>
   </header>
 
   <main>
