@@ -516,3 +516,31 @@ details.club-section > summary .grow { flex: 1; min-width: 0; display: flex; ali
 .share-line > div { flex: 1; min-width: 0; }
 .settings-group { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); margin: 2px 0 8px; }
 .settings-group:not(:first-child) { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* ---------- saving overlay: the club ball bouncing and spinning ---------- */
+.busy {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(7, 30, 43, .45); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  animation: busy-in .15s ease;
+}
+.busy[hidden] { display: none; }
+.busy-card {
+  background: var(--card); color: var(--ink); border-radius: 22px; padding: 22px 30px 20px; min-width: 200px;
+  text-align: center; box-shadow: 0 12px 36px rgba(7, 30, 43, .35);
+}
+.busy-court { position: relative; height: 92px; display: flex; justify-content: center; }
+.busy-ball { width: 64px; height: 64px; animation: busy-bounce .9s cubic-bezier(.45, 0, .55, 1) infinite; }
+.busy-shadow {
+  position: absolute; bottom: 0; left: 50%; width: 44px; height: 8px; margin-left: -22px; border-radius: 50%;
+  background: rgba(7, 30, 43, .22); animation: busy-shadow .9s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.busy-text { margin-top: 6px; font-size: 17px; font-weight: 800; }
+.busy-sub { margin-top: 4px; font-size: 13px; color: var(--muted); min-height: 1em; max-width: 220px; }
+@keyframes busy-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(24px) rotate(180deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+@keyframes busy-shadow { 0%, 100% { transform: scale(.55); opacity: .5; } 50% { transform: scale(1); opacity: 1; } }
+@keyframes busy-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .busy-ball, .busy-shadow { animation-duration: 2.4s; } }
