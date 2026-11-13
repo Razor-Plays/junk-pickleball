@@ -142,6 +142,9 @@
         // 'purchase' (credit bought) or 'balance' (what the court said was left on that date).
         // Rows written before the kind column existed are recognised by their note.
         kind: clean(m.kind).toLowerCase() === 'balance' || /^court balance/i.test(clean(m.notes)) ? 'balance' : 'purchase',
+        // For a balance check: the bookings for later sessions the court had already
+        // deducted, as "sessionId:hours,...". Also accepted from the note ("covers: ...").
+        covers: PB.parseCovers(clean(m.covers) || ((clean(m.notes).match(/covers:\s*([^|]*)/i) || [])[1] || '')),
       })),
       payments: (r.payments || []).filter((p) => clean(p.month) && clean(p.person)).map((p) => ({
         month: clean(p.month).slice(0, 7),
@@ -410,6 +413,16 @@
   };
 
   /** Hours bought vs used per member, oldest purchase used first. */
+  PB.parseCovers = (text) => {
+    const out = {};
+    for (const part of String(text || '').split(',')) {
+      const [id, h] = part.split(':').map((x) => (x || '').trim());
+      if (id && Number(h) > 0) out[id] = Number(h);
+    }
+    return out;
+  };
+  PB.formatCovers = (map) => Object.entries(map).map(([id, h]) => `${id}:${h}`).join(',');
+
   PB.todayISO = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -418,13 +431,18 @@
   /**
    * Each member's court credit, in money.
    *
-   * The court takes credit off after a session is played, so a booking only
-   * counts once its date has passed; later bookings are "booked ahead". When
-   * the court has told us a balance (a 'balance' row), that figure is the
-   * starting point: balance = court figure + top-ups since − sessions played
-   * since. Without one, it's everything bought − everything played.
-   * `adjustment` is how far the court figure differed from our own records
-   * at the time, so the history explains the jump.
+   * The court takes credit off when a court is booked, and gives it back if
+   * the booking is released, so every booking counts as soon as it's in the
+   * app, including sessions still to come.
+   *
+   * When the court has told us a balance (a 'balance' row dated D), that
+   * figure already includes every session up to D and any later bookings
+   * that existed when it was given (listed in `covers`). From then on:
+   *   balance = court figure + top-ups after D
+   *             - bookings for sessions after D that it didn't include
+   *             + bookings it included that have since been released.
+   * Without a check: everything bought - everything booked.
+   * `adjustment` is how far the court's figure differed from our own records.
    */
   PB.membershipBalances = (data, today = PB.todayISO()) => {
     const members = data.players.filter((p) => p.role === 'member');
@@ -437,34 +455,51 @@
       const purchases = lots.filter((l) => l.kind === 'purchase');
       const check = [...lots].reverse().find((l) => l.kind === 'balance') || null;
       const from = check ? check.date : '';
+      const covers = check ? check.covers : {};
       const bookings = data.bookings.filter((b) => b.member === name)
-        .map((b) => ({ date: dates.get(b.session_id) || '', value: round2(b.hours * b.rate), hours: b.hours }));
+        .map((b) => ({ id: b.session_id, date: dates.get(b.session_id) || '', hours: b.hours, rate: b.rate, value: round2(b.hours * b.rate) }));
       const sum = (rows, key) => round2(rows.reduce((t, r) => t + r[key], 0));
+      const rate = ((purchases[purchases.length - 1] || {}).rate) || data.settings.default_rate;
 
       const bought = sum(purchases.filter((p) => p.date > from), 'amount');
-      const played = bookings.filter((b) => b.date > from && b.date < today);
-      const ahead = bookings.filter((b) => b.date > from && b.date >= today);
+      // changes since the check, session by session
+      let used = 0;
+      const seen = new Set();
+      for (const b of bookings.filter((x) => x.date > from)) {
+        seen.add(b.id);
+        used += (b.hours - (covers[b.id] || 0)) * b.rate;
+      }
+      for (const [id, h] of Object.entries(covers)) if (!seen.has(id)) used -= h * rate;   // released since
+      used = round2(used);
       const start = check ? check.amount : 0;
-      const balance = round2(start + bought - sum(played, 'value'));
+      const balance = round2(start + bought - used);
 
       let adjustment = 0;
       if (check) {
-        const ours = sum(purchases.filter((p) => p.date <= from), 'amount') - sum(bookings.filter((b) => b.date && b.date <= from), 'value');
+        const coveredLater = round2(Object.entries(covers).reduce((t, [id, h]) => t + h * ((bookings.find((b) => b.id === id) || { rate }).rate), 0));
+        const ours = sum(purchases.filter((p) => p.date <= from), 'amount') - sum(bookings.filter((b) => b.date && b.date <= from), 'value') - coveredLater;
         adjustment = round2(check.amount - ours);
       }
-      const lastPurchase = purchases[purchases.length - 1];
-      const rate = (lastPurchase && lastPurchase.rate) || data.settings.default_rate;
-      const pool = round2(start + bought);   // what the bar is measured against
+      const ahead = bookings.filter((b) => b.date >= today);
+      const pool = round2(start + bought);
       return {
         name, lots, check, adjustment, balance, rate,
         hoursLeft: rate ? Math.round((balance / rate) * 10) / 10 : 0,
         aheadValue: sum(ahead, 'value'), aheadHours: sum(ahead, 'hours'),
-        playedSinceCheck: sum(played, 'value'), boughtSinceCheck: bought,
+        usedSinceCheck: used, boughtSinceCheck: bought,
         share: pool > 0 ? Math.max(0, Math.min(1, balance / pool)) : 0,
         hasCredit: lots.length > 0,
         active: members.some((m) => m.name === name && m.active),
       };
     });
+  };
+
+  /** Bookings for sessions after `date` that the court has already taken off (for a new balance check). */
+  PB.bookedAfter = (data, member, date) => {
+    const dates = new Map(data.sessions.map((s) => [s.id, s.date]));
+    const out = {};
+    for (const b of data.bookings) if (b.member === member && (dates.get(b.session_id) || '') > date) out[b.session_id] = b.hours;
+    return out;
   };
 
   /** Rate to pre-fill for a new booking by this member: the rate of their latest purchase. */

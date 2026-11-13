@@ -102,31 +102,36 @@ test('rates stay with the session they were booked on', () => {
   assert.equal(nov.totals.courtCost, 320);    // 2h at 160, not today's default 140
 });
 
-test('membership credit: money left, sessions only count once played', () => {
-  // as of 2 Nov: Ann's s1 and s2 are played (420); Ben's s1 is played (140), his 5 Nov s3 (2h at 160) is ahead
+test('membership credit: a booking comes off as soon as it is made', () => {
   const bal = PB.membershipBalances(data, '2026-11-02');
   const ann = bal.find((b) => b.name === 'Ann');
-  assert.deepEqual([ann.balance, ann.aheadValue, ann.rate, ann.hoursLeft, ann.check], [1400 - 420, 0, 140, 7, null]);
+  assert.deepEqual([ann.balance, ann.rate, ann.hoursLeft, ann.check], [1400 - 420, 140, 7, null]);
   const ben = bal.find((b) => b.name === 'Ben');
-  assert.deepEqual([ben.balance, ben.aheadValue, ben.aheadHours, ben.rate], [140 + 1600 - 140, 320, 2, 160]);
-  // after the 5 Nov session is played it comes off
-  assert.equal(PB.membershipBalances(data, '2026-11-06').find((b) => b.name === 'Ben').balance, 1600 - 320);
-  assert.equal(PB.nextRate(data, 'Ben'), 160);   // latest purchase
+  // 140 + 1600 bought; s1 (140) played and s3 (2h at 160, on 5 Nov) booked ahead are both already taken off
+  assert.deepEqual([ben.balance, ben.aheadValue, ben.aheadHours, ben.rate], [140 + 1600 - 140 - 320, 320, 2, 160]);
+  assert.equal(PB.nextRate(data, 'Ben'), 160);
   assert.equal(PB.nextRate(data, 'Ann'), 140);
 });
 
-test('membership credit: a court balance check resets the starting point and records the gap', () => {
-  const withCheck = PB.normalize({ ...raw, memberships: [...raw.memberships,
-    { id: 'c1', member: 'Ann', date: '2026-10-08', amount: 1500, hours: 0, rate: 140, notes: 'Court balance check', kind: 'balance' },
-    { id: 't1', member: 'Ann', date: '2026-10-20', amount: 700, hours: 5, rate: 140, notes: 'top-up' }] });
-  const ann = PB.membershipBalances(withCheck, '2026-11-10').find((b) => b.name === 'Ann');
-  // our records on 8 Oct: 1400 bought - 420 played = 980; the court said 1500
-  assert.equal(ann.adjustment, 520);
-  // from the check: 1500 + 700 top-up - 0 played since (s3 was Ben's) = 2200
-  assert.deepEqual([ann.balance, ann.boughtSinceCheck, ann.playedSinceCheck], [2200, 700, 0]);
-  // an older row without a kind column is still recognised as a balance check by its note
-  const legacy = PB.normalize({ ...raw, memberships: [{ id: 'x', member: 'Ann', date: '2026-10-08', amount: 900, hours: 0, rate: 140, notes: 'Court balance check: as told by the court' }] });
-  assert.equal(legacy.memberships[0].kind, 'balance');
+test('membership credit: a court balance check, later bookings, releases and top-ups', () => {
+  // The court says Ben has 1000 on 1 Nov, already counting his 5 Nov booking (s3, 2h).
+  const base = { ...raw, memberships: [...raw.memberships,
+    { id: 'c1', member: 'Ben', date: '2026-11-01', amount: 1000, hours: 0, rate: 160, kind: 'balance', covers: 's3:2' }] };
+  const at = (r) => PB.membershipBalances(PB.normalize(r), '2026-11-02').find((b) => b.name === 'Ben');
+  assert.equal(at(base).balance, 1000);
+  // our records: 1740 bought - 140 played - 320 booked = 1280; the court said 1000
+  assert.equal(at(base).adjustment, -280);
+  const more = { ...base, sessions: [...base.sessions, { id: 's9', date: '2026-11-20' }], bookings: [...base.bookings, { session_id: 's9', member: 'Ben', hours: 1, rate: 160 }] };
+  assert.equal(at(more).balance, 840);          // a new booking comes off straight away
+  const released = { ...base, bookings: base.bookings.filter((b) => !(b.session_id === 's3' && b.member === 'Ben')) };
+  assert.equal(at(released).balance, 1320);     // releasing the 5 Nov booking gives its credit back
+  const cut = { ...base, bookings: base.bookings.map((b) => (b.session_id === 's3' && b.member === 'Ben' ? { ...b, hours: 1 } : b)) };
+  assert.equal(at(cut).balance, 1160);          // 2h cut to 1h gives one hour back
+  assert.equal(at({ ...base, memberships: [...base.memberships, { id: 't', member: 'Ben', date: '2026-11-02', amount: 3000, hours: 18.75, rate: 160 }] }).balance, 4000);
+  // a check written before the covers column existed carries it in its note
+  const legacy = PB.normalize({ ...raw, memberships: [{ id: 'x', member: 'Ben', date: '2026-11-01', amount: 1000, hours: 0, rate: 160, notes: 'Court balance check: $1000 | covers: s3:2' }] });
+  assert.deepEqual([legacy.memberships[0].kind, legacy.memberships[0].covers], ['balance', { s3: 2 }]);
+  assert.deepEqual(PB.bookedAfter(PB.normalize(raw), 'Ben', '2026-11-01'), { s3: 2 });
 });
 
 test('warnings for sessions missing players or bookings', () => {

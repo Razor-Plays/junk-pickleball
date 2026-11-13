@@ -816,8 +816,8 @@
             const isLow = b.hasCredit && b.hoursLeft <= 8;
             const notes = [
               b.check ? `court check ${esc(shortDate(b.check.date))}` : 'no court check yet',
-              b.playedSinceCheck ? `${money(b.playedSinceCheck)} played ${b.check ? 'since' : 'to date'}` : '',
-              b.aheadValue ? `${money(b.aheadValue)} booked ahead` : '',
+              b.check && b.usedSinceCheck ? `${money(b.usedSinceCheck)} booked since` : '',
+              b.aheadValue ? `incl. ${money(b.aheadValue)} booked ahead` : '',
             ].filter(Boolean).join(' · ');
             return `<div class="row credit-row"><div class="grow">
                 <div class="title">${esc(b.name)}${b.active ? '' : ' <span class="muted small">(inactive)</span>'}</div>
@@ -1059,12 +1059,13 @@
       <label class="field"><span>Member</span><select name="member">${members.map((m) => `<option${m === member ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
       <label class="field"><span>Balance the court gave (${esc(d.settings.currency)})</span><input type="number" inputmode="decimal" step="0.01" name="amount" required /></label>
       <label class="field"><span>Balance as of (the last session it includes)</span><input type="date" name="date" value="${yesterday}" /></label>
-      <p class="small muted">The court takes credit off after a session is played. From this date the app counts down from the court's figure; past sessions and paybacks don't change.</p>`,
+      <p class="small muted">The court takes credit off as soon as a court is booked (and gives it back if released), so its figure already includes bookings for later sessions. From this date the app counts down from the court's figure; past sessions and paybacks don't change.</p>`,
     (fd) => {
       const amount = Number(fd.amount);
       if (!(amount >= 0) || fd.amount === '') { toast('Enter the balance', true); return false; }
+      const covers = PB.formatCovers(PB.bookedAfter(d, fd.member, fd.date));
       return save('saveMembership', { member: fd.member, date: fd.date, amount, hours: 0, rate: Number(d.settings.default_rate) || 0,
-        kind: 'balance', notes: `Court balance check: ${money(amount)} as of ${fd.date}` }, 'Court balance saved');
+        kind: 'balance', covers, notes: `Court balance check: ${money(amount)} as of ${fd.date}${covers ? ` | covers: ${covers}` : ''}` }, 'Court balance saved');
     });
   }
 
