@@ -477,16 +477,31 @@
       let adjustment = 0;
       if (check) {
         const coveredLater = round2(Object.entries(covers).reduce((t, [id, h]) => t + h * ((bookings.find((b) => b.id === id) || { rate }).rate), 0));
-        const ours = sum(purchases.filter((p) => p.date <= from), 'amount') - sum(bookings.filter((b) => b.date && b.date <= from), 'value') - coveredLater;
+        // measured from the previous court balance if there is one, else from the first purchase
+        const prev = [...lots].reverse().find((l) => l.kind === 'balance' && l.date < from) || null;
+        const after = (d) => !prev || d > prev.date;
+        const prevCovered = prev ? round2(Object.entries(prev.covers).reduce((t, [id, h]) => t + h * ((bookings.find((b) => b.id === id) || { rate }).rate), 0)) : 0;
+        const ours = (prev ? prev.amount + prevCovered : 0)
+          + sum(purchases.filter((p) => p.date <= from && after(p.date)), 'amount')
+          - sum(bookings.filter((b) => b.date && b.date <= from && after(b.date)), 'value') - coveredLater;
         adjustment = round2(check.amount - ours);
       }
       const ahead = bookings.filter((b) => b.date >= today);
-      const pool = round2(start + bought);
+      // The bar's "full" mark: the last court balance before the latest top-up,
+      // plus the top-ups since. A check after the latest top-up doesn't reset it,
+      // so the bar keeps showing how far through the current credit we are.
+      const lastBuy = purchases[purchases.length - 1];
+      const base = lastBuy ? [...lots].reverse().find((l) => l.kind === 'balance' && l.date < lastBuy.date) : null;
+      const pool = base
+        ? round2(base.amount + sum(purchases.filter((p) => p.date > base.date), 'amount'))
+        : round2(check && !lastBuy ? start : sum(purchases, 'amount'));
+      const poolFrom = base ? base.date : (lastBuy ? purchases[0].date : from);
       return {
         name, lots, check, adjustment, balance, rate,
         hoursLeft: rate ? Math.round((balance / rate) * 10) / 10 : 0,
         aheadValue: sum(ahead, 'value'), aheadHours: sum(ahead, 'hours'),
         usedSinceCheck: used, boughtSinceCheck: bought,
+        pool, poolFrom,
         share: pool > 0 ? Math.max(0, Math.min(1, balance / pool)) : 0,
         hasCredit: lots.length > 0,
         active: members.some((m) => m.name === name && m.active),

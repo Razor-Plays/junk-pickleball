@@ -128,6 +128,11 @@ test('membership credit: a court balance check, later bookings, releases and top
   const cut = { ...base, bookings: base.bookings.map((b) => (b.session_id === 's3' && b.member === 'Ben' ? { ...b, hours: 1 } : b)) };
   assert.equal(at(cut).balance, 1160);          // 2h cut to 1h gives one hour back
   assert.equal(at({ ...base, memberships: [...base.memberships, { id: 't', member: 'Ben', date: '2026-11-02', amount: 3000, hours: 18.75, rate: 160 }] }).balance, 4000);
+  // the bar: a check after the last top-up doesn't refill it; it's measured against everything bought
+  assert.deepEqual([at(base).pool, Math.round(at(base).share * 100)], [1740, 57]);
+  // a top-up after a check: the bar fills from that check's figure plus the top-up
+  const topped = at({ ...more, memberships: [...base.memberships, { id: 't', member: 'Ben', date: '2026-11-02', amount: 3000, hours: 18.75, rate: 160 }] });
+  assert.deepEqual([topped.pool, topped.poolFrom, topped.balance, Math.round(topped.share * 100)], [4000, '2026-11-01', 3840, 96]);
   // a check written before the covers column existed carries it in its note
   const legacy = PB.normalize({ ...raw, memberships: [{ id: 'x', member: 'Ben', date: '2026-11-01', amount: 1000, hours: 0, rate: 160, notes: 'Court balance check: $1000 | covers: s3:2' }] });
   assert.deepEqual([legacy.memberships[0].kind, legacy.memberships[0].covers], ['balance', { s3: 2 }]);

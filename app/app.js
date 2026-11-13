@@ -803,7 +803,7 @@
     const shortDate = (iso) => PB.dayLabel(iso).slice(4);
     const creditHistory = (b) => {
       const lines = b.lots.map((l) => l.kind === 'balance'
-        ? `<li><b>${esc(shortDate(l.date))} ${l.date.slice(0, 4)}</b> · court said ${money(l.amount)} left${b.check && b.check.id === l.id && b.adjustment ? ` <span class="muted">(${b.adjustment > 0 ? '+' : ''}${money(b.adjustment)} vs our records)</span>` : ''}</li>`
+        ? `<li><b>${esc(shortDate(l.date))} ${l.date.slice(0, 4)}</b> · BayPickle said ${money(l.amount)} left${b.check && b.check.id === l.id && b.adjustment ? ` <span class="muted">(${b.adjustment > 0 ? '+' : ''}${money(b.adjustment)} vs our records)</span>` : ''}</li>`
         : `<li>${esc(shortDate(l.date))} ${l.date.slice(0, 4)} · bought ${money(l.amount)} at ${money(l.rate)}/h${l.notes ? ` <span class="muted">· ${esc(l.notes)}</span>` : ''}</li>`);
       return `<details class="items"><summary>Credit history</summary><ul>${lines.join('')}</ul>
         <div class="btn-row"><button class="btn ghost compact" data-action="add-membership" data-member="${esc(b.name)}">＋ Top-up</button>
@@ -815,7 +815,8 @@
           ${balances.map((b) => {
             const isLow = b.hasCredit && b.hoursLeft <= 8;
             const notes = [
-              b.check ? `court check ${esc(shortDate(b.check.date))}` : 'no court check yet',
+              b.pool ? `${Math.round(b.share * 100)}% left of ${money(b.pool)} since ${esc(shortDate(b.poolFrom))} ${b.poolFrom.slice(0, 4)}` : '',
+              b.check ? `BayPickle balance ${esc(shortDate(b.check.date))}` : 'no BayPickle balance yet',
               b.check && b.usedSinceCheck ? `${money(b.usedSinceCheck)} booked since` : '',
               b.aheadValue ? `incl. ${money(b.aheadValue)} booked ahead` : '',
             ].filter(Boolean).join(' · ');

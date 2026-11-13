@@ -25,8 +25,11 @@ a court is booked and gives it back if the booking is released, so the app
 does the same. When the court
 gives a balance, enter it (**Club → Membership Balance → Enter court
 balance**): from that date the app counts down from the court's figure and
-shows how far it differed from our own records. Past sessions, fees and
-paybacks are never changed.
+shows how far it differed from our own records since the previous court
+balance. Past sessions, fees and paybacks are never changed. Each member's
+bar shows how much is left out of the court balance before their latest
+top-up plus the top-ups since (e.g. the Sept 2025 ledger + the Jan 2026
+top-up), so it only refills when money is added.
 
 Each session records where it was played and how long it ran, so 4 booked
 hours read as "2 courts × 2h". Tapping a name (on Club, or **History** on a
