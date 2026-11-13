@@ -20,7 +20,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 5;
+const API_VERSION = 6;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -33,7 +33,7 @@ const TABS = {
   Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours'],
   Bookings: ['session_id', 'member', 'hours', 'rate'],
   Attendance: ['session_id', 'name', 'guest', 'pays'],
-  Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes'],
+  Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes', 'kind'],
   Payments: ['month', 'person', 'amount', 'paid_on', 'note'],
   Kitty: ['id', 'date', 'description', 'amount'],
   Settings: ['key', 'value'],
@@ -141,6 +141,11 @@ function publicStats_() {
     rows.push({ session_date: date, session_id: a.session_id, player_name: name });
   });
   return { ok: true, club_name: settings.club_name || '', last_session: latest, rows: rows };
+}
+
+// Unique even for two saves in the same millisecond.
+function newId_(prefix) {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 function nameKey_(v) {
@@ -256,12 +261,18 @@ const ACTIONS = {
     });
   },
 
+  /** payload: { member, date, amount, rate, hours?, notes?, kind: 'purchase' | 'balance' } */
   saveMembership: function (p) {
-    if (!p.member || !Number(p.hours)) throw new Error('Membership needs a member and hours');
-    const id = p.id || 'm' + Date.now();
+    const kind = p.kind === 'balance' ? 'balance' : 'purchase';
+    if (!p.member) throw new Error('Choose a member');
+    if (kind === 'purchase' && !(Number(p.amount) > 0)) throw new Error('Enter the amount bought');
+    if (kind === 'balance' && (p.amount === '' || p.amount === undefined || isNaN(Number(p.amount)))) throw new Error('Enter the balance');
+    const id = p.id || newId_('m');
+    const rate = Number(p.rate || 0);
     upsertBy_('Memberships', 'id', id, {
-      id: id, member: p.member, date: p.date || today_(), amount: Number(p.amount || 0),
-      hours: Number(p.hours), rate: Number(p.rate || 0), notes: p.notes || '',
+      id: id, member: p.member, date: p.date || today_(), amount: Number(p.amount),
+      hours: kind === 'balance' ? 0 : Number(p.hours || (rate ? Number(p.amount) / rate : 0)),
+      rate: rate, notes: p.notes || (kind === 'balance' ? 'Court balance check' : ''), kind: kind,
     });
   },
 
@@ -282,7 +293,7 @@ const ACTIONS = {
 
   saveKitty: function (p) {
     if (!p.description) throw new Error('Kitty entry needs a description');
-    const id = p.id || 'k' + Date.now();
+    const id = p.id || newId_('k');
     upsertBy_('Kitty', 'id', id, { id: id, date: p.date || today_(), description: p.description, amount: Number(p.amount || 0) });
   },
 

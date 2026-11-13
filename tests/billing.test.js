@@ -102,14 +102,31 @@ test('rates stay with the session they were booked on', () => {
   assert.equal(nov.totals.courtCost, 320);    // 2h at 160, not today's default 140
 });
 
-test('membership balances and next rate use the oldest lot first', () => {
-  const bal = PB.membershipBalances(data);
+test('membership credit: money left, sessions only count once played', () => {
+  // as of 2 Nov: Ann's s1 and s2 are played (420); Ben's s1 is played (140), his 5 Nov s3 (2h at 160) is ahead
+  const bal = PB.membershipBalances(data, '2026-11-02');
   const ann = bal.find((b) => b.name === 'Ann');
-  assert.deepEqual([ann.purchased, ann.used, ann.left], [10, 3, 7]);
+  assert.deepEqual([ann.balance, ann.aheadValue, ann.rate, ann.hoursLeft, ann.check], [1400 - 420, 0, 140, 7, null]);
   const ben = bal.find((b) => b.name === 'Ben');
-  assert.deepEqual([ben.purchased, ben.used, ben.left], [11, 3, 8]);
-  assert.equal(PB.nextRate(data, 'Ben'), 160); // first lot (1h) used up
+  assert.deepEqual([ben.balance, ben.aheadValue, ben.aheadHours, ben.rate], [140 + 1600 - 140, 320, 2, 160]);
+  // after the 5 Nov session is played it comes off
+  assert.equal(PB.membershipBalances(data, '2026-11-06').find((b) => b.name === 'Ben').balance, 1600 - 320);
+  assert.equal(PB.nextRate(data, 'Ben'), 160);   // latest purchase
   assert.equal(PB.nextRate(data, 'Ann'), 140);
+});
+
+test('membership credit: a court balance check resets the starting point and records the gap', () => {
+  const withCheck = PB.normalize({ ...raw, memberships: [...raw.memberships,
+    { id: 'c1', member: 'Ann', date: '2026-10-08', amount: 1500, hours: 0, rate: 140, notes: 'Court balance check', kind: 'balance' },
+    { id: 't1', member: 'Ann', date: '2026-10-20', amount: 700, hours: 5, rate: 140, notes: 'top-up' }] });
+  const ann = PB.membershipBalances(withCheck, '2026-11-10').find((b) => b.name === 'Ann');
+  // our records on 8 Oct: 1400 bought - 420 played = 980; the court said 1500
+  assert.equal(ann.adjustment, 520);
+  // from the check: 1500 + 700 top-up - 0 played since (s3 was Ben's) = 2200
+  assert.deepEqual([ann.balance, ann.boughtSinceCheck, ann.playedSinceCheck], [2200, 700, 0]);
+  // an older row without a kind column is still recognised as a balance check by its note
+  const legacy = PB.normalize({ ...raw, memberships: [{ id: 'x', member: 'Ann', date: '2026-10-08', amount: 900, hours: 0, rate: 140, notes: 'Court balance check: as told by the court' }] });
+  assert.equal(legacy.memberships[0].kind, 'balance');
 });
 
 test('warnings for sessions missing players or bookings', () => {

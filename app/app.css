@@ -544,3 +544,9 @@ details.club-section > summary .grow { flex: 1; min-width: 0; display: flex; ali
 @keyframes busy-shadow { 0%, 100% { transform: scale(.55); opacity: .5; } 50% { transform: scale(1); opacity: 1; } }
 @keyframes busy-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .busy-ball, .busy-shadow { animation-duration: 2.4s; } }
+
+.credit-row { align-items: flex-start; }
+.hours-left.credit { min-width: 92px; text-align: right; }
+.hours-left.credit b { font-size: 19px; }
+.credit-row details.items { margin-top: 4px; }
+.credit-row details.items ul { padding-left: 16px; }
