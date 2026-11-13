@@ -86,6 +86,17 @@
     .core-list li{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
     .core-list li:last-child{border-bottom:none}
 
+    /* loading: the club ball bouncing and spinning, same as the app's saving screen */
+    .loader{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;background:rgba(7,30,43,.45);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+    .loader.show{display:flex}
+    .loader-card{background:var(--panel);color:var(--ink);border-radius:22px;padding:22px 30px 20px;min-width:200px;text-align:center;box-shadow:0 12px 36px rgba(7,30,43,.35)}
+    .loader-court{position:relative;height:92px;display:flex;justify-content:center}
+    .loader-ball{width:64px;height:64px;animation:loader-bounce .9s cubic-bezier(.45,0,.55,1) infinite}
+    .loader-shadow{position:absolute;bottom:0;left:50%;width:44px;height:8px;margin-left:-22px;border-radius:50%;background:rgba(7,30,43,.22);animation:loader-shadow .9s cubic-bezier(.45,0,.55,1) infinite}
+    .loader-text{margin-top:6px;font-size:17px;font-weight:800}
+    @keyframes loader-bounce{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(24px) rotate(180deg)}100%{transform:translateY(0) rotate(360deg)}}
+    @keyframes loader-shadow{0%,100%{transform:scale(.55);opacity:.5}50%{transform:scale(1);opacity:1}}
+    @media (prefers-reduced-motion: reduce){.loader-ball,.loader-shadow{animation-duration:2.4s}}
     .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
     .chart-card,.table-card{background:var(--panel);padding:14px;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
     .chart-card h3,.table-card h3{margin:0 0 10px;font-size:14px;color:var(--ink);font-weight:800}
@@ -171,7 +182,12 @@
       <div class="card"><div class="kpi-title">Last session counted</div><div id="kpiSync" class="kpi-value">—</div></div>
     </section>
 
-    <div id="loadingState" class="state">Loading live attendance data…</div>
+    <div id="loadingState" class="loader" role="status" aria-live="polite">
+      <div class="loader-card">
+        <div class="loader-court" aria-hidden="true"><img class="loader-ball" src="app/ball.svg" alt="" width="64" height="64" /><span class="loader-shadow"></span></div>
+        <div class="loader-text">Loading stats…</div>
+      </div>
+    </div>
     <div id="errorState" class="state error"></div>
 
     <section class="top-section">

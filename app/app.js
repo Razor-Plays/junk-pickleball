@@ -916,7 +916,10 @@
         <button class="btn ghost" data-action="close-sheet">‹ Back</button>
         <h3>Club stats</h3>
       </div>
+      <div class="stats-wait" aria-hidden="true"><img class="busy-ball" src="ball.svg" alt="" width="64" height="64" /><span class="busy-shadow"></span></div>
       <iframe class="stats-frame" src="../" title="Club stats"></iframe>`;
+    const frame = el.querySelector('.stats-frame');
+    frame.addEventListener('load', () => { frame.classList.add('ready'); const w = el.querySelector('.stats-wait'); if (w) w.remove(); });
     el.hidden = false;
     document.body.style.overflow = 'hidden';
   }
