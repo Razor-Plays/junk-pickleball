@@ -139,6 +139,9 @@
         hours: num(m.hours),
         rate: num(m.rate) || (num(m.hours) ? round2(num(m.amount) / num(m.hours)) : settings.default_rate),
         notes: clean(m.notes),
+        // 'purchase' (credit bought) or 'balance' (what the court said was left on that date).
+        // Rows written before the kind column existed are recognised by their note.
+        kind: clean(m.kind).toLowerCase() === 'balance' || /^court balance/i.test(clean(m.notes)) ? 'balance' : 'purchase',
       })),
       payments: (r.payments || []).filter((p) => clean(p.month) && clean(p.person)).map((p) => ({
         month: clean(p.month).slice(0, 7),
@@ -407,37 +410,67 @@
   };
 
   /** Hours bought vs used per member, oldest purchase used first. */
-  PB.membershipBalances = (data) => {
+  PB.todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /**
+   * Each member's court credit, in money.
+   *
+   * The court takes credit off after a session is played, so a booking only
+   * counts once its date has passed; later bookings are "booked ahead". When
+   * the court has told us a balance (a 'balance' row), that figure is the
+   * starting point: balance = court figure + top-ups since − sessions played
+   * since. Without one, it's everything bought − everything played.
+   * `adjustment` is how far the court figure differed from our own records
+   * at the time, so the history explains the jump.
+   */
+  PB.membershipBalances = (data, today = PB.todayISO()) => {
     const members = data.players.filter((p) => p.role === 'member');
     const names = new Set(members.map((m) => m.name));
     for (const m of data.memberships) names.add(m.member);
-    const used = new Map();
-    for (const b of data.bookings) used.set(b.member, round2((used.get(b.member) || 0) + b.hours));
+    const dates = new Map(data.sessions.map((s) => [s.id, s.date]));
 
     return [...names].sort().map((name) => {
-      const lots = data.memberships.filter((m) => m.member === name)
-        .sort((a, b) => a.date.localeCompare(b.date));
-      const purchased = round2(lots.reduce((s, l) => s + l.hours, 0));
-      const u = used.get(name) || 0;
-      let remainingUse = u;
-      let currentRate = null;
-      for (const l of lots) {
-        if (remainingUse < l.hours) { currentRate = l.rate; break; }
-        remainingUse -= l.hours;
+      const lots = data.memberships.filter((m) => m.member === name).sort((a, b) => a.date.localeCompare(b.date));
+      const purchases = lots.filter((l) => l.kind === 'purchase');
+      const check = [...lots].reverse().find((l) => l.kind === 'balance') || null;
+      const from = check ? check.date : '';
+      const bookings = data.bookings.filter((b) => b.member === name)
+        .map((b) => ({ date: dates.get(b.session_id) || '', value: round2(b.hours * b.rate), hours: b.hours }));
+      const sum = (rows, key) => round2(rows.reduce((t, r) => t + r[key], 0));
+
+      const bought = sum(purchases.filter((p) => p.date > from), 'amount');
+      const played = bookings.filter((b) => b.date > from && b.date < today);
+      const ahead = bookings.filter((b) => b.date > from && b.date >= today);
+      const start = check ? check.amount : 0;
+      const balance = round2(start + bought - sum(played, 'value'));
+
+      let adjustment = 0;
+      if (check) {
+        const ours = sum(purchases.filter((p) => p.date <= from), 'amount') - sum(bookings.filter((b) => b.date && b.date <= from), 'value');
+        adjustment = round2(check.amount - ours);
       }
+      const lastPurchase = purchases[purchases.length - 1];
+      const rate = (lastPurchase && lastPurchase.rate) || data.settings.default_rate;
+      const pool = round2(start + bought);   // what the bar is measured against
       return {
-        name, lots, purchased, used: u, left: round2(purchased - u),
-        currentRate, active: members.some((m) => m.name === name && m.active),
+        name, lots, check, adjustment, balance, rate,
+        hoursLeft: rate ? Math.round((balance / rate) * 10) / 10 : 0,
+        aheadValue: sum(ahead, 'value'), aheadHours: sum(ahead, 'hours'),
+        playedSinceCheck: sum(played, 'value'), boughtSinceCheck: bought,
+        share: pool > 0 ? Math.max(0, Math.min(1, balance / pool)) : 0,
+        hasCredit: lots.length > 0,
+        active: members.some((m) => m.name === name && m.active),
       };
     });
   };
 
-  /** Rate to pre-fill for a new booking by this member. */
+  /** Rate to pre-fill for a new booking by this member: the rate of their latest purchase. */
   PB.nextRate = (data, member) => {
     const bal = PB.membershipBalances(data).find((b) => b.name === member);
-    if (bal && bal.currentRate) return bal.currentRate;
-    if (bal && bal.lots.length) return bal.lots[bal.lots.length - 1].rate;
-    return data.settings.default_rate;
+    return (bal && bal.rate) || data.settings.default_rate;
   };
 
   /** Kitty = Reclub profit from every session + manual entries (e.g. balls bought). */

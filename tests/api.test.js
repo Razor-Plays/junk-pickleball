@@ -236,3 +236,15 @@ test('a session keeps its location and length, and members can see them', () => 
   // a session saved without them (an older app) is fine
   assert.equal(call('saveSession', session({ session: { id: 's2', date: '2026-11-13' } })).data.sessions[1].location, '');
 });
+
+test('top-ups and court balance checks are stored with their kind', () => {
+  const { call } = fresh();
+  call('savePlayer', { name: 'Ann', role: 'member', active: true });
+  let res = call('saveMembership', { member: 'Ann', date: '2026-01-05', amount: 3000, rate: 140, kind: 'purchase' });
+  assert.equal(res.ok, true);
+  res = call('saveMembership', { member: 'Ann', date: '2026-11-12', amount: 3980, rate: 140, kind: 'balance' });
+  assert.deepEqual(res.data.memberships.map((m) => [m.kind, m.amount, m.hours]), [['purchase', 3000, 3000 / 140], ['balance', 3980, 0]]);
+  assert.match(res.data.memberships[1].notes, /^Court balance/);
+  assert.equal(call('saveMembership', { member: 'Ann', kind: 'purchase', amount: 0 }).ok, false);
+  assert.equal(call('saveMembership', { member: 'Ann', kind: 'balance', amount: 0 }).ok, true);   // a zero balance is allowed
+});

@@ -304,7 +304,7 @@
 
     const ro = d.role === 'member';
     const balances = PB.membershipBalances(d).filter((b) => b.active);
-    const low = ro ? [] : balances.filter((b) => b.purchased && b.left <= 8);
+    const low = ro ? [] : balances.filter((b) => b.hasCredit && b.hoursLeft <= 8);
 
     let skipped = [];
     try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
@@ -321,7 +321,7 @@
         </div>`).join('')}</div>` : '';
 
     return `
-      ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Hours running low: ${low.map((b) => `<b>${esc(b.name)} ${b.left}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
+      ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
       ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
       ${suggestionCards}
       <h2>Past sessions</h2>
@@ -778,7 +778,7 @@
     const kitty = PB.kitty(d);
     const active = d.players.filter((p) => p.active).sort((a, b) => a.name.localeCompare(b.name));
     const inactive = d.players.filter((p) => !p.active).sort((a, b) => a.name.localeCompare(b.name));
-    const low = balances.filter((b) => b.purchased && b.left <= 8);
+    const low = balances.filter((b) => b.hasCredit && b.hoursLeft <= 8);
     const loaded = esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16));
 
     // A foldable section; each phone remembers which ones are open.
@@ -800,20 +800,38 @@
         ${ICON.chevron}
       </button>`;
 
+    const shortDate = (iso) => PB.dayLabel(iso).slice(4);
+    const creditHistory = (b) => {
+      const lines = b.lots.map((l) => l.kind === 'balance'
+        ? `<li><b>${esc(shortDate(l.date))} ${l.date.slice(0, 4)}</b> · court said ${money(l.amount)} left${b.check && b.check.id === l.id && b.adjustment ? ` <span class="muted">(${b.adjustment > 0 ? '+' : ''}${money(b.adjustment)} vs our records)</span>` : ''}</li>`
+        : `<li>${esc(shortDate(l.date))} ${l.date.slice(0, 4)} · bought ${money(l.amount)} at ${money(l.rate)}/h${l.notes ? ` <span class="muted">· ${esc(l.notes)}</span>` : ''}</li>`);
+      return `<details class="items"><summary>Credit history</summary><ul>${lines.join('')}</ul>
+        <div class="btn-row"><button class="btn ghost compact" data-action="add-membership" data-member="${esc(b.name)}">＋ Top-up</button>
+        <button class="btn ghost compact" data-action="add-court-balance" data-member="${esc(b.name)}">✓ Court balance</button></div></details>`;
+    };
     const membership = section('club-hours', 'Membership Balance',
-      low.length ? `<span class="low-note">Low: ${low.map((b) => `${esc(b.name)} ${b.left}h`).join(', ')}</span>` : `${balances.length} members`, `
+      low.length ? `<span class="low-note">Low: ${low.map((b) => `${esc(b.name)} ≈${b.hoursLeft}h`).join(', ')}</span>` : `${balances.length} members`, `
         <div class="list">
           ${balances.map((b) => {
-            const pct = b.purchased ? Math.max(0, Math.min(100, (b.left / b.purchased) * 100)) : 0;
-            const isLow = b.purchased && b.left <= 8;
-            return `<div class="row"><div class="grow">
+            const isLow = b.hasCredit && b.hoursLeft <= 8;
+            const notes = [
+              b.check ? `court check ${esc(shortDate(b.check.date))}` : 'no court check yet',
+              b.playedSinceCheck ? `${money(b.playedSinceCheck)} played ${b.check ? 'since' : 'to date'}` : '',
+              b.aheadValue ? `${money(b.aheadValue)} booked ahead` : '',
+            ].filter(Boolean).join(' · ');
+            return `<div class="row credit-row"><div class="grow">
                 <div class="title">${esc(b.name)}${b.active ? '' : ' <span class="muted small">(inactive)</span>'}</div>
-                <div class="sub">used ${b.used}h of ${b.purchased}h · ${b.currentRate ? money(b.currentRate) : '—'}/h</div>
-                <div class="bar ${isLow ? 'low' : ''}"><i style="width:${pct}%"></i></div>
-              </div><div class="hours-left${isLow ? ' low' : ''}${b.left <= 0 ? ' out' : ''}"><b>${b.left}h</b><span>left</span></div></div>`;
+                <div class="sub">≈ ${b.hoursLeft}h at ${money(b.rate)}/h</div>
+                <div class="bar ${isLow ? 'low' : ''}"><i style="width:${Math.round(b.share * 100)}%"></i></div>
+                <div class="sub small">${notes}</div>
+                ${creditHistory(b)}
+              </div><div class="hours-left credit${isLow ? ' low' : ''}${b.balance <= 0 ? ' out' : ''}"><b>${money(b.balance)}</b><span>left</span></div></div>`;
           }).join('') || '<div class="row muted">No memberships yet.</div>'}
         </div>
-        <button class="btn ghost" data-action="add-membership">＋ Record a membership purchase</button>`, true);
+        <div class="btn-row">
+          <button class="btn ghost" data-action="add-membership">＋ Record a top-up</button>
+          <button class="btn ghost" data-action="add-court-balance">✓ Enter court balance</button>
+        </div>`, true);
 
     const kittyBox = section('club-kitty', 'Kitty Balance', `<b class="${kitty.balance < 0 ? 'neg' : ''}">${money(kitty.balance)}</b>`, `
         <div class="card">
@@ -1014,17 +1032,40 @@
     });
   }
 
-  function addMembership() {
-    const members = state.data.players.filter((p) => p.role === 'member').map((p) => p.name);
-    openForm('Membership purchase', `
-      <label class="field"><span>Member</span><select name="member">${members.map((m) => `<option>${esc(m)}</option>`).join('')}</select></label>
-      <label class="field"><span>Date bought</span><input type="date" name="date" value="${todayISO()}" /></label>
-      <label class="field"><span>Amount paid</span><input type="number" inputmode="decimal" name="amount" required /></label>
-      <label class="field"><span>Bookable hours</span><input type="number" inputmode="decimal" name="hours" required /></label>
-      <label class="field"><span>Court rate per hour charged to the group</span><input type="number" inputmode="decimal" step="0.01" name="rate" placeholder="e.g. 140" required /></label>
-      <label class="field"><span>Notes</span><input type="text" name="notes" /></label>
-      <p class="small muted">New bookings use the oldest membership that still has hours, so old rates stay on old sessions.</p>`,
-    (fd) => save('saveMembership', fd, 'Membership saved'));
+  function addMembership(member = '') {
+    const d = state.data;
+    const members = d.players.filter((p) => p.role === 'member').map((p) => p.name);
+    openForm('Record a top-up', `
+      <label class="field"><span>Member</span><select name="member">${members.map((m) => `<option${m === member ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+      <label class="field"><span>Date</span><input type="date" name="date" value="${todayISO()}" /></label>
+      <label class="field"><span>Credit added (${esc(d.settings.currency)})</span><input type="number" inputmode="decimal" name="amount" required /></label>
+      <label class="field"><span>Court rate per hour charged to the group</span><input type="number" inputmode="decimal" step="0.01" name="rate" value="${esc(d.settings.default_rate)}" required /></label>
+      <label class="field"><span>Notes</span><input type="text" name="notes" placeholder="e.g. new price from January" /></label>
+      <p class="small muted">New sessions booked on this membership use this rate. Past sessions keep the rate they were booked at.</p>`,
+    (fd) => {
+      const amount = Number(fd.amount); const rate = Number(fd.rate);
+      if (!(amount > 0) || !(rate > 0)) { toast('Enter the amount and the rate', true); return false; }
+      return save('saveMembership', { ...fd, amount, rate, hours: PB.round2(amount / rate), kind: 'purchase' }, 'Top-up saved');
+    });
+  }
+
+  // What the court says is left. Becomes the new starting point for that member's credit.
+  function addCourtBalance(member = '') {
+    const d = state.data;
+    const members = d.players.filter((p) => p.role === 'member').map((p) => p.name);
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    openForm('Enter court balance', `
+      <label class="field"><span>Member</span><select name="member">${members.map((m) => `<option${m === member ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+      <label class="field"><span>Balance the court gave (${esc(d.settings.currency)})</span><input type="number" inputmode="decimal" step="0.01" name="amount" required /></label>
+      <label class="field"><span>Balance as of (the last session it includes)</span><input type="date" name="date" value="${yesterday}" /></label>
+      <p class="small muted">The court takes credit off after a session is played. From this date the app counts down from the court's figure; past sessions and paybacks don't change.</p>`,
+    (fd) => {
+      const amount = Number(fd.amount);
+      if (!(amount >= 0) || fd.amount === '') { toast('Enter the balance', true); return false; }
+      return save('saveMembership', { member: fd.member, date: fd.date, amount, hours: 0, rate: Number(d.settings.default_rate) || 0,
+        kind: 'balance', notes: `Court balance check: ${money(amount)} as of ${fd.date}` }, 'Court balance saved');
+    });
   }
 
   function addKitty() {
@@ -1149,7 +1190,8 @@
       case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'open-player': openPlayer(t.dataset.name); break;
-      case 'add-membership': addMembership(); break;
+      case 'add-membership': addMembership(t.dataset.member || ''); break;
+      case 'add-court-balance': addCourtBalance(t.dataset.member || ''); break;
       case 'share-member-invite': {
         const link = inviteLink(String(state.data.settings.member_code));
         const text = `${state.data.settings.club_name || 'Junk Pickleball'} — tap to see sessions and bills: ${link}`;
