@@ -175,6 +175,7 @@
     for (const p of state.pendingPaid) raw = applyPaid(raw, p);
     state.raw = raw;
     state.data = PB.normalize(raw);
+    state.tournaments = parseTournaments(raw);
     $('#clubName').textContent = state.data.settings.club_name || 'Junk Pickleball';
   }
 
@@ -339,6 +340,7 @@
 
     return `
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
+      ${tournamentCard()}
       ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map((s) => row(s) + (ro ? '' : `
         <button class="poll-btn" data-action="copy-poll" data-id="${esc(s.id)}">${ICON.copy || '📋'} Copy WhatsApp poll</button>`)).join('')}</div>` : ''}
       ${suggestionCards}
@@ -901,6 +903,15 @@
         </div>
         <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>`, false);
 
+    const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)));
+    const tournamentBox = section('club-tournaments', 'Mini Tournaments', tours.length ? `${tours.length} so far` : 'round robin or rotating partners', `
+        ${tours.length ? `<div class="list">${tours.map((t) => {
+    const pr = PT.progress(t); const pod = PT.podium(t);
+    return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${esc(t.name)}</div>
+            <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? `won by ${esc(pod[0])}` : `${pr.done}/${pr.total} games`}</div></div>${ICON.chevron}</button>`;
+  }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Mix up a session with a mini tournament: fixed teams of two, or a new partner every game.</p>'}
+        <button class="btn secondary block" data-action="new-tournament" style="margin-top:10px">＋ New tournament</button>`, false);
+
     const shareBox = section('club-share', 'Share &amp; Access', 'invite links', `
         <div class="card">
           <p class="small" style="margin-top:0">A link signs a phone in with one tap.</p>
@@ -932,6 +943,7 @@
       ${clubHead(d)}
       ${bragCard(d)}
       ${playersBox}
+      ${tournamentBox}
       ${membership}
       ${kittyBox}
       ${shareBox}
@@ -973,8 +985,375 @@
     document.body.style.overflow = 'hidden';
   }
 
+  // ------------------------------------------------------------ mini tournaments
+  // Schedules and standings come from tournament.js (PT). Managers set one up
+  // and enter scores; everyone can watch the games and the table.
+
+  state.pendingScores = [];   // scores shown at once while they save in the background
+  function parseTournaments(raw) {
+    const list = ((raw && raw.tournaments) || []).map((r) => {
+      let data = {};
+      try { data = JSON.parse(r.data || '{}'); } catch (e) { data = {}; }
+      return { players: [], teams: [], matches: [], ...data, id: String(r.id), session_id: String(r.session_id || ''), name: r.name || 'Mini Tournament', updated_at: r.updated_at || '' };
+    });
+    for (const p of state.pendingScores) {
+      const t = list.find((x) => x.id === p.id);
+      const m = t && t.matches.find((x) => x.id === p.match_id);
+      if (m) { m.sa = p.sa; m.sb = p.sb; }
+    }
+    return list;
+  }
+  const tournamentDate = (t) => ((state.data.sessions.find((s) => s.id === t.session_id) || {}).date) || '';
+  const tFormatName = (t) => (t.format === 'americano' ? 'Rotating partners' : 'Fixed teams');
+  const tSide = (names) => names.map(esc).join(' <span class="amp">&amp;</span> ');
+
+  /** Sessions tab: the tournament that's on now or coming up (or just finished). */
+  function tournamentCard() {
+    const today = todayISO();
+    const weekAgo = PB.shiftDays ? PB.shiftDays(today, -7) : new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const list = (state.tournaments || []).map((t) => ({ t, date: tournamentDate(t) })).filter((x) => x.date >= weekAgo);
+    if (!list.length) return '';
+    const ahead = list.filter((x) => x.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+    const pick = ahead[0] || list.sort((a, b) => b.date.localeCompare(a.date))[0];
+    const p = PT.progress(pick.t);
+    const podium = PT.podium(pick.t);
+    const line = podium.length ? `Winner: ${podium[0]}` : p.done ? `${p.done} of ${p.total} games played` : `${p.total} games · ${tFormatName(pick.t).toLowerCase()}`;
+    return `
+      <button class="t-card" data-action="open-tournament" data-id="${esc(pick.t.id)}">
+        <span class="t-card-cup" aria-hidden="true">🏆</span>
+        <span class="grow"><span class="t-card-title">${esc(pick.t.name)}</span>
+          <span class="t-card-sub">${esc(PB.dayLabel(pick.date))} · ${esc(line)}</span></span>
+        ${ICON.chevron}
+      </button>`;
+  }
+
+  // ---- the tournament itself: next up, table, every game
+  function tTop(t) {
+    const p = PT.progress(t);
+    const podium = PT.podium(t);
+    const next = PT.nextUp(t);
+    const table = PT.standings(t);
+    const teams = t.format === 'teams';
+    const date = tournamentDate(t);
+    return `
+      <p class="t-meta">${date ? `${esc(PB.dayLabel(date, true))} · ` : ''}${tFormatName(t)} · games to ${esc(t.points_to || 11)} · ${p.done} of ${p.total} played</p>
+      ${podium.length ? `
+        <div class="t-podium"><div class="t-podium-cup" aria-hidden="true">🏆</div>
+          <div><div class="t-podium-label">${teams ? 'Champions' : 'Winner'}</div><div class="t-podium-name">${esc(podium[0])}</div>
+          ${podium[1] ? `<div class="t-podium-rest">2nd ${esc(podium[1])}${podium[2] ? ` · 3rd ${esc(podium[2])}` : ''}</div>` : ''}</div></div>` : ''}
+      ${next ? `
+        <div class="t-next"><div class="t-next-label">Next up · ${next.games[0].stage === 'group' ? `Round ${next.slot}` : 'Finals'}</div>
+          ${next.games.map((m) => `<div class="t-next-game"><span class="t-court">${esc(m.court)}</span><span class="grow">${tSide(m.a)} <span class="vs">v</span> ${tSide(m.b)}</span></div>`).join('')}
+          ${next.resting.length ? `<div class="t-rest">Sitting out: ${next.resting.map(esc).join(', ')}</div>` : ''}</div>` : ''}
+      <h2>Standings</h2>
+      <div class="card t-table-card"><table class="t-table">
+        <thead><tr><th></th><th>${teams ? 'Team' : 'Player'}</th>${teams ? '<th>W</th><th>L</th><th>+/−</th>' : '<th>Pts</th><th>W</th><th>+/−</th>'}</tr></thead>
+        <tbody>${table.map((x) => `<tr${x.rank === 1 && x.played ? ' class="lead"' : ''}><td class="rk">${x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
+    ? `<td><b>${x.won}</b></td><td>${x.lost}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`
+    : `<td><b>${x.pf}</b></td><td>${x.won}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`}</tr>`).join('')}</tbody>
+      </table></div>
+      <p class="small muted" style="margin:6px 2px 0">${teams ? 'Ranked by wins, then point difference.' : 'Ranked by your own points, then wins.'}</p>`;
+  }
+
+  function tActions(t) {
+    if (state.data.role === 'member') return '';
+    return `
+      ${PT.finals(t).length ? '<button class="btn block" data-action="t-finals">Round robin done: create the final</button>' : ''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn ghost" data-action="t-replace">Replace a player</button>
+        <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
+      </div>`;
+  }
+
+  function renderTournament(partial = false) {
+    const el = $('#sheet');
+    const t = (state.tournaments || []).find((x) => x.id === state.tview);
+    if (!t) { state.tview = null; closeSheet(); return; }
+    const admin = state.data.role !== 'member';
+    if (partial && $('#tTop')) {
+      // typing a score: refresh the table around the inputs, leave the inputs alone
+      $('#tTop').innerHTML = tTop(t);
+      $('#tActions').innerHTML = tActions(t);
+      for (const m of t.matches) {
+        const row = el.querySelector(`.t-match[data-mid="${m.id}"]`);
+        if (row) { row.classList.toggle('a-won', PT.isScored(m) && m.sa > m.sb); row.classList.toggle('b-won', PT.isScored(m) && m.sb > m.sa); }
+      }
+      return;
+    }
+    const scroll = el.scrollTop;
+    const slots = [...new Set(t.matches.map((m) => m.slot))].sort((a, b) => a - b);
+    const stageName = { final: 'Final', third: '3rd place' };
+    const score = (m, side) => (admin
+      ? `<input class="t-score" type="number" inputmode="numeric" min="0" max="99" data-mid="${esc(m.id)}" data-side="${side}" value="${m[side === 'a' ? 'sa' : 'sb'] ?? ''}" aria-label="Score for ${esc(m[side].join(' and '))}" />`
+      : `<span class="t-res">${m[side === 'a' ? 'sa' : 'sb'] ?? '–'}</span>`);
+    el.innerHTML = `
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>${esc(t.name)}</h3></div>
+      <div class="sheet-body t-view">
+        <div id="tTop">${tTop(t)}</div>
+        <h2>Games</h2>
+        ${slots.map((slot) => {
+    const games = t.matches.filter((m) => m.slot === slot);
+    const finals = games[0].stage !== 'group';
+    return `
+          <div class="t-round"><div class="t-round-label">${finals ? 'Finals' : `Round ${slot}`}</div>
+            ${games.map((m) => `
+            <div class="t-match${PT.isScored(m) && m.sa > m.sb ? ' a-won' : ''}${PT.isScored(m) && m.sb > m.sa ? ' b-won' : ''}" data-mid="${esc(m.id)}">
+              <span class="t-court">${esc(m.court)}</span>
+              <div class="t-sides">
+                ${stageName[m.stage] ? `<div class="t-stage">${stageName[m.stage]}</div>` : ''}
+                <div class="t-line a"><span class="grow">${tSide(m.a)}</span>${score(m, 'a')}</div>
+                <div class="t-line b"><span class="grow">${tSide(m.b)}</span>${score(m, 'b')}</div>
+              </div>
+            </div>`).join('')}
+          </div>`;
+  }).join('')}
+        ${admin ? '<p class="small muted center" style="margin-top:10px">Type both scores for a game; it saves by itself.</p>' : ''}
+        <div id="tActions">${tActions(t)}</div>
+      </div>`;
+    el.hidden = false;
+    el.scrollTop = scroll;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function openTournament(id) {
+    state.draft = null; state.tdraft = null;
+    state.tview = id;
+    $('#sheet').classList.remove('stats-sheet');
+    renderTournament();
+    $('#sheet').scrollTop = 0;
+  }
+
+  // A score: shown straight away, saved in the background, one after another.
+  function commitScore(id, matchId, sa, sb) {
+    const p = { id, match_id: matchId, sa, sb };
+    state.pendingScores.push(p);
+    setData(state.serverRaw);
+    renderTournament(true);
+    state.scoreQueue = (state.scoreQueue || Promise.resolve()).then(async () => {
+      try {
+        await api('setMatchScore', p, { quiet: true });
+      } catch (e) {
+        tournamentError(e, `Couldn't save that score. Check it and try again.`);
+      } finally {
+        state.pendingScores = state.pendingScores.filter((x) => x !== p);
+        setData(state.serverRaw);
+        if (state.tview) renderTournament(document.activeElement && document.activeElement.classList.contains('t-score'));
+      }
+    });
+  }
+  function tournamentError(e, fallback) {
+    if (/Unknown action/i.test(e.message || '')) toast('The sheet script needs updating before tournaments work (Apps Script → Deploy → New version).', true);
+    else if (e.code === 'auth') handleError(e);
+    else toast(e.message || fallback, true);
+  }
+  document.addEventListener('change', (ev) => {
+    const input = ev.target;
+    if (!input.classList || !input.classList.contains('t-score') || !state.tview) return;
+    const t = state.tournaments.find((x) => x.id === state.tview);
+    const m = t && t.matches.find((x) => x.id === input.dataset.mid);
+    if (!m) return;
+    const row = input.closest('.t-match');
+    const [a, b] = ['a', 'b'].map((s) => row.querySelector(`.t-score[data-side="${s}"]`).value.trim());
+    if (a === '' && b === '') { if (PT.isScored(m)) commitScore(t.id, m.id, null, null); return; }
+    if (a === '' || b === '') return;   // wait for the other score
+    const sa = Number(a), sb = Number(b);
+    if (!Number.isInteger(sa) || !Number.isInteger(sb) || sa < 0 || sb < 0) { toast('Scores are whole numbers', true); return; }
+    if (sa === sb) { toast('A game needs a winner: the scores can\'t be equal', true); return; }
+    if (m.sa === sa && m.sb === sb) return;
+    commitScore(t.id, m.id, sa, sb);
+  });
+  // While a tournament is on screen, keep it live for people watching.
+  setInterval(async () => {
+    if (!state.tview || $('#sheet').hidden || document.visibilityState !== 'visible') return;
+    if (state.busy || state.inFlight || state.pendingScores.length) return;
+    const typing = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('t-score');
+    try { await api('load'); } catch (e) { return; }
+    if (state.tview && !$('#sheet').hidden) renderTournament(!!typing);
+  }, 20000);
+
+  // ---- setting one up (managers)
+  function newTournament() {
+    const d = state.data;
+    const today = todayISO();
+    const sorted = [...d.sessions].sort((a, b) => a.date.localeCompare(b.date));
+    const s = sorted.find((x) => x.date >= today) || sorted[sorted.length - 1];
+    if (!s) { toast('Add a session first', true); return; }
+    state.draft = null; state.tview = null;
+    state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Mini Tournament', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
+    tAdoptSession();
+    $('#sheet').classList.remove('stats-sheet');
+    renderTournamentSetup();
+    $('#sheet').scrollTop = 0;
+  }
+  // Courts from the session's booking, and its players if attendance is already in.
+  function tAdoptSession() {
+    const d = state.data, dr = state.tdraft;
+    const s = d.sessions.find((x) => x.id === dr.session_id);
+    const sum = PB.sessionSummary(d, s);
+    const courts = sum.hours / (s.play_hours || 2);
+    dr.courts = Number.isInteger(courts) && courts >= 1 && courts <= 3 ? courts : 2;
+    const there = d.attendance.filter((a) => a.session_id === s.id && a.pays !== PB.RECLUB).map((a) => a.name);
+    if (there.length && !dr.players.length) dr.players = [...new Set(there)];
+  }
+  function tDraftBuild(dr) {
+    const n = dr.players.length;
+    if (dr.format === 'teams') {
+      if (n < 6) return { error: 'Pick at least 6 players (3 teams).' };
+      if (n % 2) return { error: 'Teams need an even number: add or remove one player.' };
+      const teams = PT.pairUp(dr.players);
+      return { teams, matches: PT.buildTeams(teams, dr.courts) };
+    }
+    if (n < 4) return { error: 'Pick at least 4 players.' };
+    const options = PT.americanoRounds(n, dr.courts);
+    if (!options.includes(dr.rounds)) dr.rounds = PT.americanoDefault(n, dr.courts);
+    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts), options };
+  }
+  function renderTournamentSetup() {
+    const el = $('#sheet');
+    const d = state.data, dr = state.tdraft;
+    if (!dr) return;
+    const scroll = el.scrollTop;
+    const today = todayISO();
+    const sessions = [...d.sessions].sort((a, b) => b.date.localeCompare(a.date)).filter((s, i) => s.date >= today || i < 8 || s.id === dr.session_id).slice(0, 12);
+    const freq = PB.frequency(d, PB.shiftMonth(today.slice(0, 7), -4) + '-01');
+    const known = d.players.filter((p) => p.active).sort((a, b) => (freq.get(b.name) || 0) - (freq.get(a.name) || 0) || a.name.localeCompare(b.name)).map((p) => p.name);
+    const names = [...known, ...dr.players.filter((p) => !known.includes(p))];
+    const built = tDraftBuild(dr);
+    const est = built.matches ? PT.estimate(built.matches, dr.points_to) : null;
+    const seg = (action, value, label, on) => `<button type="button" class="seg-btn${on ? ' on' : ''}" data-action="${action}" data-v="${value}">${label}</button>`;
+    el.innerHTML = `
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Cancel</button><h3>New tournament</h3></div>
+      <div class="sheet-body t-setup">
+        <label class="field"><span>Session</span>
+          <select id="tSession">${sessions.map((s) => `<option value="${esc(s.id)}"${s.id === dr.session_id ? ' selected' : ''}>${esc(PB.dayLabel(s.date, true))}${s.location ? ` · ${esc(s.location)}` : ''}</option>`).join('')}</select></label>
+        <label class="field"><span>Name</span><input type="text" id="tName" value="${esc(dr.name)}" /></label>
+
+        <h2>Format</h2>
+        <div class="seg">${seg('t-format', 'teams', 'Fixed teams', dr.format === 'teams')}${seg('t-format', 'americano', 'Rotating partners', dr.format === 'americano')}</div>
+        <p class="small muted" style="margin:6px 2px 0">${dr.format === 'teams'
+    ? 'Teams of two. Every team plays every other team, then the top two play a final.'
+    : 'Americano: a new partner every game. Each player collects their own points; most points wins.'}</p>
+
+        <div class="t-opts">
+          <div><div class="chip-label">Games to</div><div class="seg small">${[11, 15, 21].map((v) => seg('t-points', v, v, dr.points_to === v)).join('')}</div></div>
+          <div><div class="chip-label">Courts</div><div class="seg small">${[1, 2, 3].map((v) => seg('t-courts', v, v, dr.courts === v)).join('')}</div></div>
+        </div>
+
+        <h2>Players <span class="pill">${dr.players.length}</span></h2>
+        <div class="chips">${names.map((n) => `<button class="chip${dr.players.includes(n) ? ' on' : ''}" data-action="t-toggle" data-name="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+        <div class="guest-row" style="margin-top:10px">
+          <input type="text" id="tGuest" placeholder="Someone else (a guest)" autocomplete="off" />
+          <button class="btn secondary compact" data-action="t-add-guest">Add</button>
+        </div>
+
+        ${built.error ? `<div class="warn-box" style="margin-top:14px">${esc(built.error)}</div>` : ''}
+        ${!built.error && dr.format === 'teams' ? `
+        <h2>Teams <span class="pill">${built.teams.length}</span></h2>
+        <p class="small muted" style="margin:-4px 2px 8px">Tap two players to swap them.</p>
+        <div class="t-teams">${built.teams.map((team, i) => `
+          <div class="t-team"><span class="t-team-no">${i + 1}</span>${team.players.map((p) => `<button class="chip${dr.pick === p ? ' picked' : ''}" data-action="t-pick" data-name="${esc(p)}">${esc(p)}</button>`).join('')}</div>`).join('')}</div>
+        <button class="btn secondary block" data-action="t-shuffle" style="margin-top:10px">🔀 Shuffle teams</button>` : ''}
+        ${!built.error && dr.format === 'americano' ? `
+        <label class="field" style="margin-top:14px"><span>Rounds</span>
+          <select id="tRounds">${built.options.map((r) => `<option value="${r}"${r === dr.rounds ? ' selected' : ''}>${r} rounds</option>`).join('')}</select></label>
+        <p class="small muted" style="margin:-4px 2px 0">Only round counts where everyone plays the same number of games are offered.</p>` : ''}
+
+        ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${dr.courts} court${dr.courts === 1 ? '' : 's'}
+          <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h ${est.minutes % 60 ? `${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? ', plus the final' : ''}</span></div>` : ''}
+      </div>
+      <div class="sheet-foot"><div class="inner">
+        <div class="summary">${built.error ? '<span class="muted">Not ready yet</span>' : `<b>${dr.players.length} players</b><br><span class="muted">${dr.format === 'teams' ? `${built.teams.length} teams` : `${dr.rounds} rounds`} · to ${dr.points_to}</span>`}</div>
+        <button class="btn" data-action="t-create"${built.error ? ' disabled' : ''}>Create</button>
+      </div></div>`;
+    el.hidden = false;
+    el.scrollTop = scroll;
+    document.body.style.overflow = 'hidden';
+  }
+  ['input', 'change'].forEach((type) => document.addEventListener(type, (ev) => {
+    const dr = state.tdraft;
+    if (!dr) return;
+    if (ev.target.id === 'tName') dr.name = ev.target.value;
+    if (type !== 'change') return;
+    if (ev.target.id === 'tSession') { dr.session_id = ev.target.value; dr.players = []; tAdoptSession(); renderTournamentSetup(); }
+    if (ev.target.id === 'tRounds') { dr.rounds = Number(ev.target.value); renderTournamentSetup(); }
+  }));
+
+  /** Tournament buttons. Returns true when the action was one of ours. */
+  async function tournamentAction(a, t) {
+    const dr = state.tdraft;
+    switch (a) {
+      case 'open-tournament': openTournament(t.dataset.id); return true;
+      case 'new-tournament': newTournament(); return true;
+      case 't-format': dr.format = t.dataset.v; dr.pick = null; renderTournamentSetup(); return true;
+      case 't-points': dr.points_to = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-courts': dr.courts = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-toggle': {
+        const n = t.dataset.name;
+        dr.players = dr.players.includes(n) ? dr.players.filter((x) => x !== n) : dr.players.concat(n);
+        dr.pick = null; renderTournamentSetup(); return true;
+      }
+      case 't-add-guest': {
+        const n = $('#tGuest').value.trim();
+        if (!n) return true;
+        const same = [...state.data.players.map((p) => p.name), ...dr.players].find((x) => x.toLowerCase() === n.toLowerCase());
+        if (same) { if (!dr.players.includes(same)) dr.players.push(same); } else dr.players.push(n);
+        renderTournamentSetup(); return true;
+      }
+      case 't-shuffle': dr.players = PT.shuffle(dr.players); dr.pick = null; renderTournamentSetup(); return true;
+      case 't-pick': {
+        const n = t.dataset.name;
+        if (!dr.pick) dr.pick = n;
+        else if (dr.pick === n) dr.pick = null;
+        else {
+          const i = dr.players.indexOf(dr.pick), j = dr.players.indexOf(n);
+          [dr.players[i], dr.players[j]] = [dr.players[j], dr.players[i]];
+          dr.pick = null;
+        }
+        renderTournamentSetup(); return true;
+      }
+      case 't-create': {
+        const built = tDraftBuild(dr);
+        if (built.error) return true;
+        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches };
+        try {
+          await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Mini Tournament', data });
+          toast('Tournament created');
+          openTournament(dr.id);
+        } catch (e) { tournamentError(e, 'Couldn\'t create the tournament.'); }
+        return true;
+      }
+      case 't-finals': case 't-delete': case 't-replace': {
+        const cur = state.tournaments.find((x) => x.id === state.tview);
+        if (!cur) return true;
+        const put = async (next, okMsg) => {
+          const { id, session_id, name, updated_at, ...data } = next;   // eslint-disable-line no-unused-vars
+          try { await api('saveTournament', { id, session_id, name, data }); toast(okMsg); renderTournament(); } catch (e) { tournamentError(e, 'Couldn\'t save that.'); }
+        };
+        if (a === 't-finals') {
+          const finals = PT.finals(cur);
+          if (finals.length) await put({ ...cur, matches: [...cur.matches, ...finals] }, 'Final created');
+        } else if (a === 't-delete') {
+          if (!window.confirm(`Delete "${cur.name}" and all its scores?`)) return true;
+          try { await api('deleteTournament', { id: cur.id }); toast('Tournament deleted'); state.tview = null; closeSheet(); } catch (e) { tournamentError(e, 'Couldn\'t delete it.'); }
+        } else {
+          const from = window.prompt(`Who is being replaced?\n\n${cur.players.join(', ')}`);
+          if (!from) return true;
+          const out = cur.players.find((p) => p.toLowerCase() === from.trim().toLowerCase());
+          if (!out) { toast(`${from.trim()} isn't in this tournament`, true); return true; }
+          const to = (window.prompt(`Who is taking ${out}'s place?`) || '').trim();
+          if (!to) return true;
+          if (cur.players.some((p) => p.toLowerCase() === to.toLowerCase())) { toast(`${to} is already playing`, true); return true; }
+          await put(PT.replacePlayer(cur, out, to), `${to} is in for ${out}`);
+        }
+        return true;
+      }
+      default: return false;
+    }
+  }
+
   function closeSheet() {
     state.draft = null;
+    state.tdraft = null; state.tview = null;
     const el = $('#sheet');
     el.hidden = true;
     el.classList.remove('stats-sheet');
@@ -1163,6 +1542,7 @@
     const a = t.dataset.action;
     const dr = state.draft;
     const d = state.data;
+    if (await tournamentAction(a, t)) return;
 
     switch (a) {
       case 'connect': {
