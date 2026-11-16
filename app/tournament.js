@@ -127,6 +127,11 @@
     if (step === 1) { for (let r = 3; r <= 12; r += 1) out.push(r); } else { for (let r = step; r <= 12; r += step) out.push(r); }
     return out;
   };
+  /** What a number of rounds means: games in total, games per player, and how often each sits out. */
+  PT.americanoLoad = (n, rounds, courts = 2) => {
+    const playing = Math.min(courts, Math.floor(n / 4)) * 4;
+    return { games: (rounds * playing) / 4, each: (rounds * playing) / n, sits: rounds - (rounds * playing) / n };
+  };
   PT.americanoDefault = (n, courts = 2) => {
     const options = PT.americanoRounds(n, courts);
     if (!options.length) return 0;
