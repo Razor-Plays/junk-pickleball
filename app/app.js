@@ -1029,12 +1029,13 @@
     const line = podium.length ? `Winner: ${podium[0]}` : p.done ? `${p.done} of ${p.total} games played` : `${p.total} games · ${tFormatName(pick.t).toLowerCase()}`;
     const live = pick.date === today && p.done > 0 && !podium.length;
     const when = pick.date === today ? 'Today' : PB.dayLabel(pick.date);
+    const custom = pick.t.name.trim().toLowerCase() !== 'junk cup';   // the logo already says Junk Cup
     return `
       <button class="t-card" data-action="open-tournament" data-id="${esc(pick.t.id)}">
-        <img class="t-card-logo" src="junk-cup.svg" alt="" width="64" height="64" />
+        <img class="t-card-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />
         <span class="grow">
           <span class="t-card-eyebrow">${esc(when)}${live ? ' <span class="t-live">Live</span>' : ''}</span>
-          <span class="t-word">${tWord(pick.t.name)}</span>
+          ${custom ? `<span class="t-card-name">${esc(pick.t.name)}</span>` : ''}
           <span class="t-card-sub">${esc(line)}</span></span>
         ${ICON.chevron}
       </button>`;
@@ -1051,11 +1052,9 @@
     const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     return `
       <div class="t-hero">
-        <img class="t-hero-logo" src="junk-cup.svg" alt="" width="104" height="104" />
-        <div class="t-hero-text">
-          <div class="t-word big">${tWord(t.name)}</div>
-          <div class="t-hero-chips">${date ? `<span>${esc(PB.dayLabel(date))}</span>` : ''}<span>${tFormatName(t)}</span><span>to ${esc(t.points_to || 11)}</span></div>
-        </div>
+        <img class="t-hero-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />
+        ${t.name.trim().toLowerCase() !== 'junk cup' ? `<div class="t-word">${tWord(t.name)}</div>` : ''}
+        <div class="t-hero-chips">${date ? `<span>${esc(PB.dayLabel(date))}</span>` : ''}<span>${tFormatName(t)}</span><span>to ${esc(t.points_to || 11)}</span></div>
       </div>
       <div class="t-progress"><div class="bar"><i style="width:${pct}%"></i></div><span class="t-meta">${p.done} of ${p.total} games played</span></div>
       ${podium.length ? `

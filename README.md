@@ -29,8 +29,8 @@ partner every game, each player collects their own points). The app lays the
 games out round by round on courts A and B, shows who is next and who sits
 out, and keeps the table as scores go in. Managers enter scores; everyone
 else can watch from the card at the top of Sessions, which updates by itself.
-The schedule and table logic is in `app/tournament.js`; the emblem is
-`app/junk-cup.svg`.
+The schedule and table logic is in `app/tournament.js`; the Junk Cup logo is
+`app/junk-cup.webp`.
 
 Membership credit is tracked in money. The court takes credit off as soon as
 a court is booked and gives it back if the booking is released, so the app
