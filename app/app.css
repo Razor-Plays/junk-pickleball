@@ -731,3 +731,11 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
   background: #092D4A; color: #FFF6E5; font: inherit; font-weight: 800; font-size: 15px; box-shadow: 0 3px 10px rgba(9, 45, 74, .3);
 }
 .t-share:disabled { opacity: .6; }
+
+/* Replace / delete live behind a fold, well clear of the score boxes */
+.t-manage { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); text-align: center; }
+.t-manage > summary { display: inline-block; cursor: pointer; list-style: none; color: var(--muted); font-size: 14px; font-weight: 700; padding: 8px 14px; }
+.t-manage > summary::-webkit-details-marker { display: none; }
+.t-manage > summary::after { content: ' ▾'; }
+.t-manage[open] > summary::after { content: ' ▴'; }
+.t-manage .btn-row { margin-top: 8px; justify-content: center; }

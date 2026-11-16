@@ -1086,10 +1086,13 @@
     if (state.data.role === 'member') return '';
     return `
       ${PT.finals(t).length ? '<button class="btn block" data-action="t-finals">Round robin done: create the final</button>' : ''}
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn ghost" data-action="t-replace">Replace a player</button>
-        <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
-      </div>`;
+      <details class="t-manage">
+        <summary>Manage tournament</summary>
+        <div class="btn-row">
+          <button class="btn ghost" data-action="t-replace">Replace a player</button>
+          <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
+        </div>
+      </details>`;
   }
 
   // ---- the result as a picture to share (drawn on a canvas, 1080 x 1350)
