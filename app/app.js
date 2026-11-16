@@ -322,8 +322,11 @@
     let skipped = [];
     try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
     const suggestions = ro ? [] : PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
+    // Folded unless it was opened last time (remembered per phone).
+    const suggestionsOpen = store.get('jpb.open.regulars') === '1';
     const suggestionCards = suggestions.length ? `
-      <h2>Guests who keep coming</h2>
+      <details class="glance suggest-fold" data-glance="regulars" ${suggestionsOpen ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Guests who keep coming <span class="count">· ${suggestions.length}</span></span></summary>
       <div class="list">${suggestions.map((g, i) => `
         <div class="row">
           <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
@@ -331,7 +334,8 @@
             <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
           <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}">Make a regular</button>
           <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
-        </div>`).join('')}</div>` : '';
+        </div>`).join('')}</div>
+      </details>` : '';
 
     return `
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
