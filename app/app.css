@@ -724,3 +724,10 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .t-view input.t-score { height: 38px; padding: 0 4px; }
 .t-match { padding: 6px 12px; margin-bottom: 6px; }
 .t-line { padding: 2px 0; }
+
+/* champions card: share the result as a picture */
+.t-share {
+  position: relative; margin-top: 12px; padding: 9px 18px; border-radius: 999px; border: 0; cursor: pointer;
+  background: #092D4A; color: #FFF6E5; font: inherit; font-weight: 800; font-size: 15px; box-shadow: 0 3px 10px rgba(9, 45, 74, .3);
+}
+.t-share:disabled { opacity: .6; }
