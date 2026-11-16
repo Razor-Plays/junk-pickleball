@@ -56,9 +56,38 @@
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="config.js"></script>
-  <script src="billing.js"></script>
-  <script src="tournament.js"></script>
-  <script src="app.js"></script>
+  <script>
+    // Always run the latest version. Phones hold on to old copies of the app's
+    // files, so before loading them we ask the server (a tiny request each,
+    // never cached) what the current version of each file is, and load that
+    // exact version. With no connection it falls back to whatever is saved.
+    (function () {
+      var files = ['config.js', 'billing.js', 'tournament.js', 'app.js'];
+      var css = 'app.css';
+      function version(file) {
+        return fetch(file, { method: 'HEAD', cache: 'no-store' })
+          .then(function (r) { return (r.headers.get('etag') || r.headers.get('last-modified') || '').replace(/[^a-zA-Z0-9]/g, ''); })
+          .catch(function () { return ''; });
+      }
+      function withTimeout(p) {
+        return Promise.race([p, new Promise(function (res) { setTimeout(function () { res(null); }, 2500); })]);
+      }
+      function load(versions) {
+        versions = versions || [];
+        var v = function (i) { return versions[i] ? '?v=' + versions[i] : ''; };
+        if (versions[files.length]) {
+          var link = document.querySelector('link[rel="stylesheet"][href^="app.css"]');
+          if (link) link.href = css + '?v=' + versions[files.length];
+        }
+        files.forEach(function (f, i) {
+          var el = document.createElement('script');
+          el.src = f + v(i);
+          el.async = false;   // keep them in order
+          document.body.appendChild(el);
+        });
+      }
+      withTimeout(Promise.all(files.concat(css).map(version))).then(load, function () { load(); });
+    })();
+  </script>
 </body>
 </html>
