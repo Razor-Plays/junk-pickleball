@@ -928,9 +928,9 @@
     return `
       ${clubHead(d)}
       ${bragCard(d)}
+      ${playersBox}
       ${membership}
       ${kittyBox}
-      ${playersBox}
       ${shareBox}
       ${settingsBox}
       <p class="small muted center">Data from the Google Sheet · loaded ${loaded}<br>
