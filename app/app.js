@@ -581,6 +581,9 @@
           <input type="text" id="dNotes" value="${esc(dr.notes)}" />
         </label>
         ${dr.isNew ? '' : `<button class="btn ghost" data-action="share-session">Share session message</button>`}
+        ${dr.isNew || dr.date > todayISO() ? '' : ((state.tournaments || []).some((x) => x.session_id === dr.id)
+    ? `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Open this session's tournament</button>`
+    : `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Start a mini tournament with these players</button>`)}
       </div>
       <div class="sheet-foot"><div class="inner">
         <div class="summary"><b>${sum.heads} players · ${money(sum.cpp)} each</b><br>
@@ -1172,11 +1175,12 @@
   }, 20000);
 
   // ---- setting one up (managers)
-  function newTournament() {
+  function newTournament(sessionId = '') {
     const d = state.data;
     const today = todayISO();
     const sorted = [...d.sessions].sort((a, b) => a.date.localeCompare(b.date));
-    const s = sorted.find((x) => x.date >= today) || sorted[sorted.length - 1];
+    // the session asked for; otherwise today's, or the next one coming up
+    const s = d.sessions.find((x) => x.id === sessionId) || sorted.find((x) => x.date >= today) || sorted[sorted.length - 1];
     if (!s) { toast('Add a session first', true); return; }
     state.draft = null; state.tview = null;
     state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Mini Tournament', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
@@ -1186,14 +1190,18 @@
     $('#sheet').scrollTop = 0;
   }
   // Courts from the session's booking, and its players if attendance is already in.
-  function tAdoptSession() {
+  function tAdoptSession(force = false) {
     const d = state.data, dr = state.tdraft;
     const s = d.sessions.find((x) => x.id === dr.session_id);
     const sum = PB.sessionSummary(d, s);
     const courts = sum.hours / (s.play_hours || 2);
     dr.courts = Number.isInteger(courts) && courts >= 1 && courts <= 3 ? courts : 2;
-    const there = d.attendance.filter((a) => a.session_id === s.id && a.pays !== PB.RECLUB).map((a) => a.name);
-    if (there.length && !dr.players.length) dr.players = [...new Set(there)];
+    // The session's attendance is the roster. Reclub guests aren't named, so they're added by hand.
+    const rows = d.attendance.filter((a) => a.session_id === s.id);
+    const there = [...new Set(rows.filter((a) => a.pays !== PB.RECLUB).map((a) => a.name))];
+    dr.reclub = rows.length - rows.filter((a) => a.pays !== PB.RECLUB).length;
+    dr.fromAttendance = there.length;
+    if (there.length && (force || !dr.players.length)) dr.players = there;
   }
   function tDraftBuild(dr) {
     const n = dr.players.length;
@@ -1226,6 +1234,10 @@
       <div class="sheet-body t-setup">
         <label class="field"><span>Session</span>
           <select id="tSession">${sessions.map((s) => `<option value="${esc(s.id)}"${s.id === dr.session_id ? ' selected' : ''}>${esc(PB.dayLabel(s.date, true))}${s.location ? ` · ${esc(s.location)}` : ''}</option>`).join('')}</select></label>
+        <div class="t-roster-note">${dr.fromAttendance
+    ? `<span class="grow">👥 <b>${dr.fromAttendance} players</b> taken from this session's attendance${dr.reclub ? `. ${dr.reclub} Reclub guest${dr.reclub === 1 ? ' isn\'t' : 's aren\'t'} named: add them below if they're playing.` : '.'}</span>
+             <button class="btn ghost compact" data-action="t-use-attendance" title="Reset the players to the session's attendance">↻ Reset</button>`
+    : '<span class="grow">No attendance entered for this session yet. Tick who\'s there in the session first, or pick the players below.</span>'}</div>
         <label class="field"><span>Name</span><input type="text" id="tName" value="${esc(dr.name)}" /></label>
 
         <h2>Format</h2>
@@ -1274,7 +1286,7 @@
     if (!dr) return;
     if (ev.target.id === 'tName') dr.name = ev.target.value;
     if (type !== 'change') return;
-    if (ev.target.id === 'tSession') { dr.session_id = ev.target.value; dr.players = []; tAdoptSession(); renderTournamentSetup(); }
+    if (ev.target.id === 'tSession') { dr.session_id = ev.target.value; dr.players = []; tAdoptSession(true); renderTournamentSetup(); }
     if (ev.target.id === 'tRounds') { dr.rounds = Number(ev.target.value); renderTournamentSetup(); }
   }));
 
@@ -1284,6 +1296,17 @@
     switch (a) {
       case 'open-tournament': openTournament(t.dataset.id); return true;
       case 'new-tournament': newTournament(); return true;
+      case 'session-tournament': {
+        // From the session editor: save who's ticked first, so the roster is what's on screen.
+        const sid = state.draft && state.draft.id;
+        if (!sid) return true;
+        await saveDraft();
+        if (state.draft) return true;   // the save was refused; its message is already showing
+        const existing = (state.tournaments || []).find((x) => x.session_id === sid);
+        if (existing) openTournament(existing.id); else newTournament(sid);
+        return true;
+      }
+      case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
       case 't-format': dr.format = t.dataset.v; dr.pick = null; renderTournamentSetup(); return true;
       case 't-points': dr.points_to = Number(t.dataset.v); renderTournamentSetup(); return true;
       case 't-courts': dr.courts = Number(t.dataset.v); renderTournamentSetup(); return true;
@@ -1720,7 +1743,12 @@
     else if (!open && marked) { state.skipPop = true; history.back(); }
   }).observe($('#sheet'), { attributes: true, attributeFilter: ['hidden'] });
   window.addEventListener('popstate', () => {
-    if (state.skipPop) { state.skipPop = false; return; }
+    if (state.skipPop) {
+      state.skipPop = false;
+      // one screen closed and another opened straight after: keep a step for the new one
+      if (!$('#sheet').hidden && !(history.state && history.state.jpbSheet)) history.pushState({ jpbSheet: 1 }, '');
+      return;
+    }
     if ($('#sheet').hidden) return;
     const fn = state.sheetBack;
     state.sheetBack = null;
