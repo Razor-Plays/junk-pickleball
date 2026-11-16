@@ -335,7 +335,8 @@
 
     return `
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
-      ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
+      ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map((s) => row(s) + (ro ? '' : `
+        <button class="poll-btn" data-action="copy-poll" data-id="${esc(s.id)}">${ICON.copy || '📋'} Copy WhatsApp poll</button>`)).join('')}</div>` : ''}
       ${suggestionCards}
       <h2>Past sessions</h2>
       ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions played yet.</div>'}
@@ -401,7 +402,7 @@
       const isGuestRow = (a) => a.guest && !(a.pays === a.name && PB.playerNamed(d, a.name));
       draft = {
         id, isNew: false, date: s.date, notes: s.notes, reclub_fee: s.reclub_fee,
-        location: s.location || '', play_hours: s.play_hours || 2,
+        location: s.location || '', play_hours: s.play_hours || 2, start_hour: s.start_hour || 20,
         baseUpdatedAt: s.updated_at || '',
         bookings,
         // A past guest who has since become a regular (and paid their own way)
@@ -421,7 +422,7 @@
         id: PB.newSessionId(date), isNew: true, date, notes: '', reclub_fee: d.settings.reclub_fee,
         // start from where we played last time; otherwise the first place on the list
         location: ([...d.sessions].sort((a, b) => b.date.localeCompare(a.date)).find((x) => x.location) || {}).location || PB.locations(d)[0] || '',
-        play_hours: 2,
+        play_hours: 2, start_hour: 20,
         bookings: {}, players: [], guests: [], keptGuests: new Set(), search: '',
       };
     }
@@ -478,6 +479,13 @@
     const sum = draftSummary();
     const scroll = el.scrollTop;
 
+    // The WhatsApp poll question, from what's in the editor right now.
+    const pollNow = () => {
+      const s = { id: dr.id, date: dr.date, location: dr.location, play_hours: Number(dr.play_hours) || 2, start_hour: Number(dr.start_hour) || 20 };
+      const bookings = Object.entries(dr.bookings).filter(([, b]) => b.hours > 0).map(([member, b]) => ({ session_id: dr.id, member, hours: b.hours, rate: b.rate }));
+      return PB.pollText({ ...d, sessions: [s], bookings, attendance: [] }, s);
+    };
+    state.pollNow = pollNow;
     // Before the day, the booking is what changes; from the day itself, it's who came.
     // Uses the saved date, so the layout doesn't jump around while the date is being edited.
     const savedDate = ((d.sessions.find((x) => x.id === dr.id)) || {}).date || '';
@@ -491,6 +499,9 @@
             ${[...new Set([...PB.locations(d), dr.location].filter(Boolean))].map((l) => `<option${l === dr.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}
             <option value=""${dr.location ? '' : ' selected'}>Not set</option>
           </select>
+        </label>
+        <label class="field"><span>Starts</span>
+          <select id="dStart">${[17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21].map((h) => `<option value="${h}"${Number(dr.start_hour) === h ? ' selected' : ''}>${esc(PB.timeRange(h, 0).split('-')[1])}</option>`).join('')}</select>
         </label>
         <label class="field"><span>How long we play</span>
           <select id="dLength">${[1, 1.5, 2, 2.5, 3].map((h) => `<option value="${h}"${Number(dr.play_hours) === h ? ' selected' : ''}>${h} hour${h === 1 ? '' : 's'}</option>`).join('')}</select>
@@ -544,6 +555,11 @@
         ${dr.isNew ? '' : '<button class="btn danger" data-action="delete-session">Delete</button>'}
       </div>
       <div class="sheet-body">
+        ${!gameDay && dr.date >= todayISO() ? `
+        <div class="poll-card">
+          <div class="grow"><div class="small muted">WhatsApp poll question</div><div class="poll-text">${esc(pollNow())}</div></div>
+          <button class="btn secondary compact" data-action="copy-poll">Copy</button>
+        </div>` : ''}
         ${gameDay ? `${whoBlock}
         <details class="glance booking-fold" data-fold="booking" ${dr.bookingOpen ? 'open' : ''}>
           <summary><span class="chev" aria-hidden="true"></span><span class="grow">Booking
@@ -600,7 +616,7 @@
     const id = dr.id;
     const payload = {
       ...(dr.isNew ? {} : { base_updated_at: dr.baseUpdatedAt }),
-      session: { id, date: dr.date, reclub_fee: dr.reclub_fee, notes: dr.notes, location: dr.location, play_hours: Number(dr.play_hours) || 2 },
+      session: { id, date: dr.date, reclub_fee: dr.reclub_fee, notes: dr.notes, location: dr.location, play_hours: Number(dr.play_hours) || 2, start_hour: Number(dr.start_hour) || 20 },
       bookings: Object.entries(dr.bookings)
         .filter(([, b]) => Number(b.hours) > 0)
         .map(([member, b]) => ({ member, hours: Number(b.hours), rate: Number(b.rate) })),
@@ -1168,6 +1184,14 @@
       case 'edit-session': openSession(t.dataset.id); break;
       case 'close-sheet': state.sheetBack = null; closeSheet(); break;
       case 'open-stats': openStats(); break;
+      case 'copy-poll': {
+        // From the list: the saved session. In the editor: what's on screen now.
+        const s = t.dataset.id ? d.sessions.find((x) => x.id === t.dataset.id) : null;
+        const text = s ? PB.pollText(d, s) : (state.pollNow ? state.pollNow() : '');
+        if (!text) return;
+        try { await navigator.clipboard.writeText(text); toast('Poll question copied. Paste it into a new WhatsApp poll.'); } catch (e) { window.prompt('Copy this:', text); }
+        break;
+      }
       case 'sheet-back': { const fn = state.sheetBack; state.sheetBack = null; if (fn) fn(); else closeSheet(); break; }
       case 'view-session': {
         const from = t.dataset.from;
@@ -1324,6 +1348,12 @@
     }
   }, true);
 
+  // Session editor: keep the poll preview in step with the date, time, place and length.
+  ['input', 'change'].forEach((type) => document.addEventListener(type, (ev) => {
+    if (!['dDate', 'dStart', 'dLength', 'dLocation'].includes(ev.target.id)) return;
+    setTimeout(() => { const el = $('#sheet .poll-text'); if (el && state.pollNow) el.textContent = state.pollNow(); }, 0);
+  }));
+
   // Club tab: filter the player list as you type (no re-render, so the keyboard stays up).
   document.addEventListener('input', (ev) => {
     if (ev.target.id !== 'pSearch') return;
@@ -1361,6 +1391,8 @@
       dr.date = el.value;
     } else if (el.id === 'dLocation') {
       dr.location = el.value;
+    } else if (el.id === 'dStart') {
+      dr.start_hour = Number(el.value);
     } else if (el.id === 'dLength') {
       dr.play_hours = Number(el.value);
       updateSheetFooter();

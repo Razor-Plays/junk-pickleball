@@ -227,10 +227,11 @@ test('member code: read-only, and nothing private ever leaves the sheet', () => 
 
 test('a session keeps its location and length, and members can see them', () => {
   const { gas, call } = fresh();
-  const res = call('saveSession', session({ session: { id: 's1', date: '2026-11-12', location: 'Tin Hau', play_hours: 2 } }));
+  const res = call('saveSession', session({ session: { id: 's1', date: '2026-11-12', location: 'Tin Hau', play_hours: 2, start_hour: 19.5 } }));
+  assert.equal(res.data.sessions[0].start_hour, 19.5);
   assert.deepEqual([res.data.sessions[0].location, res.data.sessions[0].play_hours], ['Tin Hau', 2]);
   assert.equal(gas.sheets.Sessions.maxCols >= 7, true, 'older tabs get the new columns');
-  assert.equal(gas.sheets.Sessions.rows[0].join(), 'id,date,reclub_fee,notes,updated_at,location,play_hours');
+  assert.equal(gas.sheets.Sessions.rows[0].join(), 'id,date,reclub_fee,notes,updated_at,location,play_hours,start_hour');
   const memberCode = (gas.sheets.Settings.rows.find((r) => r[0] === 'member_code') || [])[1];
   const m = gas.post({ code: memberCode, action: 'load' }).data.sessions[0];
   assert.deepEqual(m, { id: 's1', date: '2026-11-12', location: 'Tin Hau', play_hours: 2 });
