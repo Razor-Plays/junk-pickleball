@@ -568,3 +568,7 @@ details.club-section > summary .grow { flex: 1; min-width: 0; display: flex; ali
   background: var(--card); border: 1px solid var(--line); border-radius: 14px;
 }
 .poll-text { font-weight: 700; }
+
+/* Sessions tab: suggested regulars, folded by default */
+details.suggest-fold { margin: 18px 0 10px; }
+details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
