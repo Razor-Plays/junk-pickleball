@@ -96,3 +96,16 @@ test('replacing a player keeps the schedule', () => {
   assert.equal(r.teams[1].players[0], 'Sub');
   assert.equal(r.matches.length, t.matches.length);
 });
+
+test('fixed teams can meet more than once, and the default fills a session', () => {
+  const teams = PT.pairUp(names(6));                      // 3 teams
+  const twice = PT.buildTeams(teams, 2, 2);
+  assert.equal(twice.length, 6);
+  noClash(twice);
+  const meets = new Map();
+  for (const m of twice) { const k = [m.ta, m.tb].sort().join('v'); meets.set(k, (meets.get(k) || 0) + 1); }
+  assert.deepEqual([...meets.values()], [2, 2, 2]);
+  // 15 minutes a game to 11: 3 or 4 teams play twice, 5 or 6 teams once
+  assert.deepEqual([3, 4, 5, 6].map((n) => PT.teamsDefaultTimes(n, 2, 11)), [2, 2, 1, 1]);
+  assert.deepEqual(PT.estimate(twice, 11), { games: 6, slots: 6, minutes: 90, perGame: 15, courts: 1 });
+});

@@ -1228,7 +1228,9 @@
       if (n < 6) return { error: 'Pick at least 6 players (3 teams).' };
       if (n % 2) return { error: 'Teams need an even number: add or remove one player.' };
       const teams = PT.pairUp(dr.players);
-      return { teams, matches: PT.buildTeams(teams, dr.courts) };
+      // how often teams meet: chosen by the manager, otherwise whatever fills the session best
+      const times = dr.times || PT.teamsDefaultTimes(teams.length, dr.courts, dr.points_to);
+      return { teams, times, matches: PT.buildTeams(teams, dr.courts, times) };
     }
     if (n < 4) return { error: 'Pick at least 4 players.' };
     const options = PT.americanoRounds(n, dr.courts);
@@ -1283,17 +1285,21 @@
         <p class="small muted" style="margin:-4px 2px 8px">Tap two players to swap them.</p>
         <div class="t-teams">${built.teams.map((team, i) => `
           <div class="t-team"><span class="t-team-no">${i + 1}</span>${team.players.map((p) => `<button class="chip${dr.pick === p ? ' picked' : ''}" data-action="t-pick" data-name="${esc(p)}">${esc(p)}</button>`).join('')}</div>`).join('')}</div>
-        <button class="btn secondary block" data-action="t-shuffle" style="margin-top:10px">🔀 Shuffle teams</button>` : ''}
+        <button class="btn secondary block" data-action="t-shuffle" style="margin-top:10px">🔀 Shuffle teams</button>
+        <div class="chip-label" style="margin-top:14px">Each team plays every other team</div>
+        <div class="seg">${[[1, 'Once'], [2, 'Twice'], [3, '3 times']].map(([v, label]) => seg('t-times', v, label, built.times === v)).join('')}</div>
+        <p class="small muted" style="margin:6px 2px 0">${built.teams.length} teams: ${(built.teams.length - 1) * built.times} games each${built.teams.length % 2 ? ', and one team rests each round' : ''}.</p>` : ''}
         ${!built.error && dr.format === 'americano' ? `
         <label class="field" style="margin-top:14px"><span>Rounds</span>
           <select id="tRounds">${built.options.map((r) => { const g = PT.americanoLoad(dr.players.length, r, dr.courts); return `<option value="${r}"${r === dr.rounds ? ' selected' : ''}>${r} rounds · ${g.games} games · ${g.each} each${g.sits ? `, sit out ${g.sits}` : ''}</option>`; }).join('')}</select></label>
         <p class="small muted" style="margin:-4px 2px 0">Each round is one game per court. Only round counts where everyone plays the same number of games are offered.</p>` : ''}
 
-        ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${dr.courts} court${dr.courts === 1 ? '' : 's'}
-          <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h ${est.minutes % 60 ? `${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? ', plus the final' : ''}</span></div>` : ''}
+        ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${est.courts} court${est.courts === 1 ? '' : 's'}
+          <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h${est.minutes % 60 ? ` ${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? `, plus ${est.perGame}m for the final` : ''}</span>
+          <div class="small muted" style="margin-top:2px">Allowing ${est.perGame} minutes a game, changeover included.</div></div>` : ''}
       </div>
       <div class="sheet-foot"><div class="inner">
-        <div class="summary">${built.error ? '<span class="muted">Not ready yet</span>' : `<b>${dr.players.length} players</b><br><span class="muted">${dr.format === 'teams' ? `${built.teams.length} teams` : `${dr.rounds} rounds`} · to ${dr.points_to}</span>`}</div>
+        <div class="summary">${built.error ? '<span class="muted">Not ready yet</span>' : `<b>${dr.players.length} players</b><br><span class="muted">${dr.format === 'teams' ? `${built.teams.length} teams · ${built.matches.length} games` : `${dr.rounds} rounds`} · to ${dr.points_to}</span>`}</div>
         <button class="btn" data-action="t-create"${built.error ? ' disabled' : ''}>Create</button>
       </div></div>`;
     el.hidden = false;
@@ -1328,17 +1334,20 @@
       case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
       case 't-format': dr.format = t.dataset.v; dr.pick = null; renderTournamentSetup(); return true;
       case 't-points': dr.points_to = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-times': dr.times = Number(t.dataset.v); renderTournamentSetup(); return true;
       case 't-courts': dr.courts = Number(t.dataset.v); renderTournamentSetup(); return true;
       case 't-toggle': {
         const n = t.dataset.name;
         dr.players = dr.players.includes(n) ? dr.players.filter((x) => x !== n) : dr.players.concat(n);
-        dr.pick = null; renderTournamentSetup(); return true;
+        dr.pick = null; dr.times = 0;   // a different number of teams: pick the best fit again
+        renderTournamentSetup(); return true;
       }
       case 't-add-guest': {
         const n = $('#tGuest').value.trim();
         if (!n) return true;
         const same = [...state.data.players.map((p) => p.name), ...dr.players].find((x) => x.toLowerCase() === n.toLowerCase());
         if (same) { if (!dr.players.includes(same)) dr.players.push(same); } else dr.players.push(n);
+        dr.times = 0;
         renderTournamentSetup(); return true;
       }
       case 't-shuffle': dr.players = PT.shuffle(dr.players); dr.pick = null; renderTournamentSetup(); return true;
@@ -1356,7 +1365,7 @@
       case 't-create': {
         const built = tDraftBuild(dr);
         if (built.error) return true;
-        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches };
+        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches, ...(built.times ? { times: built.times } : {}) };
         try {
           await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Junk Cup', data });
           toast('Tournament created');
