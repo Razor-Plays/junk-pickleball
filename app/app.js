@@ -460,6 +460,9 @@
     const q = dr.search.trim().toLowerCase();
     const byActivity = (a, b) => (freq.get(b.name) || 0) - (freq.get(a.name) || 0) || a.name.localeCompare(b.name);
     const list = active.filter((p) => !q || p.name.toLowerCase().includes(q)).sort(byActivity);
+    // Searching also finds inactive players; tapping one brings them back and adds them.
+    const resting = q ? d.players.filter((p) => !p.active && !dr.players.includes(p.name) && p.name.toLowerCase().includes(q)).sort((x, y) => x.name.localeCompare(y.name)) : [];
+    const restChip = (p) => `<button class="chip resting" data-action="reactivate-player" data-name="${esc(p.name)}">${esc(p.name)} <span class="tag">inactive · tap to add</span></button>`;
     // "Usual crowd" = played at least 3 times in the last 4 months.
     const usual = list.filter((p) => (freq.get(p.name) || 0) >= 3);
     const others = list.filter((p) => (freq.get(p.name) || 0) < 3).sort((a, b) => a.name.localeCompare(b.name));
@@ -537,7 +540,7 @@
         <div class="chips">${usual.map(chip).join('')}</div>
         <div class="chip-label">Everyone else — A to Z</div>
         <div class="chips">${others.map(chip).join('')}</div>` : `
-        <div class="chips">${list.map(chip).join('')}${addChip}</div>`}
+        <div class="chips">${list.map(chip).join('')}${resting.map(restChip).join('')}${addChip}</div>`}
 
         <h2>Guests <span class="pill">${dr.guests.length}</span></h2>
         ${dr.guests.map((g, i) => `
@@ -1230,6 +1233,14 @@
         const name = t.dataset.name;
         if (await save('savePlayer', { name, role: 'player', active: true, isNew: true }, `${name} added`)) {
           dr.players.push(name); dr.search = ''; renderSheet();
+        }
+        break;
+      }
+      case 'reactivate-player': {
+        const pl = d.players.find((x) => x.name === t.dataset.name);
+        if (!pl) return;
+        if (await save('savePlayer', { originalName: pl.name, name: pl.name, role: pl.role, active: true, phone: pl.phone, notes: pl.notes }, `${pl.name} is active again`)) {
+          dr.players.push(pl.name); dr.search = ''; renderSheet();
         }
         break;
       }
