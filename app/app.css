@@ -572,3 +572,6 @@ details.club-section > summary .grow { flex: 1; min-width: 0; display: flex; ali
 /* Sessions tab: suggested regulars, folded by default */
 details.suggest-fold { margin: 18px 0 10px; }
 details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+
+.chip.resting { border-style: dashed; }
+.chip.resting .tag { font-weight: 400; color: var(--muted); font-size: 12px; }
