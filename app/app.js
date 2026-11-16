@@ -1447,4 +1447,22 @@
     }
   }
   start();
+
+  // Coming back to the app (unlocking the phone, switching back from WhatsApp)
+  // fetches the latest from the sheet, so nobody looks at old data. Skipped
+  // while something is open or saving, and at most once every 30 seconds.
+  let lastAuto = Date.now();
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.apiUrl || !state.code || !state.data) return;
+    if (state.busy || state.inFlight || state.pendingPaid.length || !$('#sheet').hidden) return;
+    if (Date.now() - lastAuto < 30000) return;
+    lastAuto = Date.now();
+    try {
+      await api('load');
+      if ($('#sheet').hidden) render();
+    } catch (e) {
+      if (e.code === 'auth') handleError(e);   // a bad connection stays quiet; the old data is still shown
+    }
+  });
 })();
