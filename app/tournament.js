@@ -109,12 +109,33 @@
     a: g.a, b: g.b, ta: g.ta || '', tb: g.tb || '', sa: null, sb: null,
   });
 
-  /** Fixed teams: a round robin on the courts. */
-  PT.buildTeams = (teams, courts = 2) => {
-    const games = PT.roundRobin(teams.length).flat().map(([i, j]) => ({
-      sides: [teams[i].id, teams[j].id], a: teams[i].players, b: teams[j].players, ta: teams[i].id, tb: teams[j].id,
-    }));
+  /**
+   * Fixed teams: a round robin on the courts. `times` = how often each pair of
+   * teams meets (1 to 3); sides swap on the repeat.
+   */
+  PT.buildTeams = (teams, courts = 2, times = 1) => {
+    const once = PT.roundRobin(teams.length).flat();
+    const games = [];
+    for (let k = 0; k < Math.max(1, times); k += 1) {
+      for (const [x, y] of once) {
+        const [i, j] = k % 2 ? [y, x] : [x, y];
+        games.push({ sides: [teams[i].id, teams[j].id], a: teams[i].players, b: teams[j].players, ta: teams[i].id, tb: teams[j].id });
+      }
+    }
     return PT.schedule(games, courts).map(blank);
+  };
+
+  /** Minutes to allow for one game, changeover included (a club night gets 6 to 8 games a court in 2 hours). */
+  PT.minutesPerGame = (pointsTo = 11) => (pointsTo >= 21 ? 25 : pointsTo >= 15 ? 20 : 15);
+
+  /** How many times teams should meet to fill a session without running past about 1h40. */
+  PT.teamsDefaultTimes = (nTeams, courts = 2, pointsTo = 11) => {
+    let best = 1;
+    for (let k = 1; k <= 3; k += 1) {
+      const teams = Array.from({ length: nTeams }, (_, i) => ({ id: `T${i + 1}`, players: [`a${i}`, `b${i}`] }));
+      if (PT.estimate(PT.buildTeams(teams, courts, k), pointsTo).minutes <= 100) best = k;
+    }
+    return best;
   };
 
   /** Round counts where everyone ends up with the same number of games. */
@@ -290,8 +311,9 @@
   /** A rough "how long will this take" for the setup screen. */
   PT.estimate = (matches, pointsTo = 11) => {
     const slots = matches.length ? Math.max(...matches.map((m) => m.slot)) : 0;
-    const perGame = pointsTo >= 21 ? 20 : pointsTo >= 15 ? 15 : 12;
-    return { games: matches.length, slots, minutes: slots * perGame };
+    const perGame = PT.minutesPerGame(pointsTo);
+    const courts = new Set(matches.map((m) => m.court)).size;   // courts actually in use
+    return { games: matches.length, slots, minutes: slots * perGame, perGame, courts };
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PT;
