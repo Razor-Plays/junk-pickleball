@@ -326,13 +326,13 @@
     const suggestionsOpen = store.get('jpb.open.regulars') === '1';
     const suggestionCards = suggestions.length ? `
       <details class="glance suggest-fold" data-glance="regulars" ${suggestionsOpen ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Guests who keep coming <span class="count">· ${suggestions.length}</span></span></summary>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Promote to Regular <span class="count">· ${suggestions.length}</span></span></summary>
       <div class="list">${suggestions.map((g, i) => `
         <div class="row">
           <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
           <div class="grow"><div class="title">${esc(g.name)}</div>
             <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
-          <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}">Make a regular</button>
+          <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}" aria-label="Promote ${esc(g.name)} to a regular">Promote</button>
           <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
         </div>`).join('')}</div>
       </details>` : '';
