@@ -582,8 +582,8 @@
         </label>
         ${dr.isNew ? '' : `<button class="btn ghost" data-action="share-session">Share session message</button>`}
         ${dr.isNew || dr.date > todayISO() ? '' : ((state.tournaments || []).some((x) => x.session_id === dr.id)
-    ? `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Open this session's tournament</button>`
-    : `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Start a mini tournament with these players</button>`)}
+    ? `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Open this session's Junk Cup</button>`
+    : `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Start a Junk Cup with these players</button>`)}
       </div>
       <div class="sheet-foot"><div class="inner">
         <div class="summary"><b>${sum.heads} players · ${money(sum.cpp)} each</b><br>
@@ -907,12 +907,12 @@
         <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>`, false);
 
     const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)));
-    const tournamentBox = section('club-tournaments', 'Mini Tournaments', tours.length ? `${tours.length} so far` : 'round robin or rotating partners', `
+    const tournamentBox = section('club-tournaments', 'Junk Cup', tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments', `
         ${tours.length ? `<div class="list">${tours.map((t) => {
     const pr = PT.progress(t); const pod = PT.podium(t);
     return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${esc(t.name)}</div>
             <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? `won by ${esc(pod[0])}` : `${pr.done}/${pr.total} games`}</div></div>${ICON.chevron}</button>`;
-  }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Mix up a session with a mini tournament: fixed teams of two, or a new partner every game.</p>'}
+  }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Turn a session into a Junk Cup: fixed teams of two, or a new partner every game.</p>'}
         <button class="btn secondary block" data-action="new-tournament" style="margin-top:10px">＋ New tournament</button>`, false);
 
     const shareBox = section('club-share', 'Share &amp; Access', 'invite links', `
@@ -997,7 +997,7 @@
     const list = ((raw && raw.tournaments) || []).map((r) => {
       let data = {};
       try { data = JSON.parse(r.data || '{}'); } catch (e) { data = {}; }
-      return { players: [], teams: [], matches: [], ...data, id: String(r.id), session_id: String(r.session_id || ''), name: r.name || 'Mini Tournament', updated_at: r.updated_at || '' };
+      return { players: [], teams: [], matches: [], ...data, id: String(r.id), session_id: String(r.session_id || ''), name: r.name || 'Junk Cup', updated_at: r.updated_at || '' };
     });
     for (const p of state.pendingScores) {
       const t = list.find((x) => x.id === p.id);
@@ -1008,6 +1008,12 @@
   }
   const tournamentDate = (t) => ((state.data.sessions.find((s) => s.id === t.session_id) || {}).date) || '';
   const tFormatName = (t) => (t.format === 'americano' ? 'Rotating partners' : 'Fixed teams');
+  // The tournament's name as a wordmark: last word in orange, like the club logo.
+  const tWord = (name) => {
+    const words = String(name).trim().split(/\s+/);
+    const last = words.pop();
+    return `${words.length ? `${esc(words.join(' '))} ` : ''}<em>${esc(last)}</em>`;
+  };
   const tSide = (names) => names.map(esc).join(' <span class="amp">&amp;</span> ');
 
   /** Sessions tab: the tournament that's on now or coming up (or just finished). */
@@ -1021,11 +1027,15 @@
     const p = PT.progress(pick.t);
     const podium = PT.podium(pick.t);
     const line = podium.length ? `Winner: ${podium[0]}` : p.done ? `${p.done} of ${p.total} games played` : `${p.total} games · ${tFormatName(pick.t).toLowerCase()}`;
+    const live = pick.date === today && p.done > 0 && !podium.length;
+    const when = pick.date === today ? 'Today' : PB.dayLabel(pick.date);
     return `
       <button class="t-card" data-action="open-tournament" data-id="${esc(pick.t.id)}">
-        <span class="t-card-cup" aria-hidden="true">🏆</span>
-        <span class="grow"><span class="t-card-title">${esc(pick.t.name)}</span>
-          <span class="t-card-sub">${esc(PB.dayLabel(pick.date))} · ${esc(line)}</span></span>
+        <img class="t-card-logo" src="junk-cup.svg" alt="" width="64" height="64" />
+        <span class="grow">
+          <span class="t-card-eyebrow">${esc(when)}${live ? ' <span class="t-live">Live</span>' : ''}</span>
+          <span class="t-word">${tWord(pick.t.name)}</span>
+          <span class="t-card-sub">${esc(line)}</span></span>
         ${ICON.chevron}
       </button>`;
   }
@@ -1038,20 +1048,30 @@
     const table = PT.standings(t);
     const teams = t.format === 'teams';
     const date = tournamentDate(t);
+    const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     return `
-      <p class="t-meta">${date ? `${esc(PB.dayLabel(date, true))} · ` : ''}${tFormatName(t)} · games to ${esc(t.points_to || 11)} · ${p.done} of ${p.total} played</p>
+      <div class="t-hero">
+        <img class="t-hero-logo" src="junk-cup.svg" alt="" width="104" height="104" />
+        <div class="t-hero-text">
+          <div class="t-word big">${tWord(t.name)}</div>
+          <div class="t-hero-chips">${date ? `<span>${esc(PB.dayLabel(date))}</span>` : ''}<span>${tFormatName(t)}</span><span>to ${esc(t.points_to || 11)}</span></div>
+        </div>
+      </div>
+      <div class="t-progress"><div class="bar"><i style="width:${pct}%"></i></div><span class="t-meta">${p.done} of ${p.total} games played</span></div>
       ${podium.length ? `
-        <div class="t-podium"><div class="t-podium-cup" aria-hidden="true">🏆</div>
-          <div><div class="t-podium-label">${teams ? 'Champions' : 'Winner'}</div><div class="t-podium-name">${esc(podium[0])}</div>
-          ${podium[1] ? `<div class="t-podium-rest">2nd ${esc(podium[1])}${podium[2] ? ` · 3rd ${esc(podium[2])}` : ''}</div>` : ''}</div></div>` : ''}
+        <div class="t-podium">
+          <div class="t-podium-label">${teams ? 'Champions' : 'Champion'}</div>
+          <div class="t-podium-name">🏆 ${esc(podium[0])}</div>
+          ${podium[1] ? `<div class="t-podium-rest"><span>🥈 ${esc(podium[1])}</span>${podium[2] ? `<span>🥉 ${esc(podium[2])}</span>` : ''}</div>` : ''}
+        </div>` : ''}
       ${next ? `
         <div class="t-next"><div class="t-next-label">Next up · ${next.games[0].stage === 'group' ? `Round ${next.slot}` : 'Finals'}</div>
-          ${next.games.map((m) => `<div class="t-next-game"><span class="t-court">${esc(m.court)}</span><span class="grow">${tSide(m.a)} <span class="vs">v</span> ${tSide(m.b)}</span></div>`).join('')}
+          ${next.games.map((m) => `<div class="t-next-game"><span class="t-court c-${esc(m.court)}">${esc(m.court)}</span><span class="grow">${tSide(m.a)} <span class="vs">v</span> ${tSide(m.b)}</span></div>`).join('')}
           ${next.resting.length ? `<div class="t-rest">Sitting out: ${next.resting.map(esc).join(', ')}</div>` : ''}</div>` : ''}
       <h2>Standings</h2>
       <div class="card t-table-card"><table class="t-table">
         <thead><tr><th></th><th>${teams ? 'Team' : 'Player'}</th>${teams ? '<th>W</th><th>L</th><th>+/−</th>' : '<th>Pts</th><th>W</th><th>+/−</th>'}</tr></thead>
-        <tbody>${table.map((x) => `<tr${x.rank === 1 && x.played ? ' class="lead"' : ''}><td class="rk">${x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
+        <tbody>${table.map((x) => `<tr${x.rank === 1 && x.played ? ' class="lead"' : ''}><td class="rk">${x.played && x.rank <= 3 ? `<span class="t-medal m${x.rank}">${x.rank}</span>` : x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
     ? `<td><b>${x.won}</b></td><td>${x.lost}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`
     : `<td><b>${x.pf}</b></td><td>${x.won}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`}</tr>`).join('')}</tbody>
       </table></div>
@@ -1090,7 +1110,7 @@
       ? `<input class="t-score" type="number" inputmode="numeric" min="0" max="99" data-mid="${esc(m.id)}" data-side="${side}" value="${m[side === 'a' ? 'sa' : 'sb'] ?? ''}" aria-label="Score for ${esc(m[side].join(' and '))}" />`
       : `<span class="t-res">${m[side === 'a' ? 'sa' : 'sb'] ?? '–'}</span>`);
     el.innerHTML = `
-      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>${esc(t.name)}</h3></div>
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>Tournament</h3></div>
       <div class="sheet-body t-view">
         <div id="tTop">${tTop(t)}</div>
         <h2>Games</h2>
@@ -1101,7 +1121,7 @@
           <div class="t-round"><div class="t-round-label">${finals ? 'Finals' : `Round ${slot}`}</div>
             ${games.map((m) => `
             <div class="t-match${PT.isScored(m) && m.sa > m.sb ? ' a-won' : ''}${PT.isScored(m) && m.sb > m.sa ? ' b-won' : ''}" data-mid="${esc(m.id)}">
-              <span class="t-court">${esc(m.court)}</span>
+              <span class="t-court c-${esc(m.court)}">${esc(m.court)}</span>
               <div class="t-sides">
                 ${stageName[m.stage] ? `<div class="t-stage">${stageName[m.stage]}</div>` : ''}
                 <div class="t-line a"><span class="grow">${tSide(m.a)}</span>${score(m, 'a')}</div>
@@ -1183,7 +1203,7 @@
     const s = d.sessions.find((x) => x.id === sessionId) || sorted.find((x) => x.date >= today) || sorted[sorted.length - 1];
     if (!s) { toast('Add a session first', true); return; }
     state.draft = null; state.tview = null;
-    state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Mini Tournament', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
+    state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Junk Cup', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
     tAdoptSession();
     $('#sheet').classList.remove('stats-sheet');
     renderTournamentSetup();
@@ -1267,8 +1287,8 @@
         <button class="btn secondary block" data-action="t-shuffle" style="margin-top:10px">🔀 Shuffle teams</button>` : ''}
         ${!built.error && dr.format === 'americano' ? `
         <label class="field" style="margin-top:14px"><span>Rounds</span>
-          <select id="tRounds">${built.options.map((r) => `<option value="${r}"${r === dr.rounds ? ' selected' : ''}>${r} rounds</option>`).join('')}</select></label>
-        <p class="small muted" style="margin:-4px 2px 0">Only round counts where everyone plays the same number of games are offered.</p>` : ''}
+          <select id="tRounds">${built.options.map((r) => { const g = PT.americanoLoad(dr.players.length, r, dr.courts); return `<option value="${r}"${r === dr.rounds ? ' selected' : ''}>${r} rounds · ${g.games} games · ${g.each} each${g.sits ? `, sit out ${g.sits}` : ''}</option>`; }).join('')}</select></label>
+        <p class="small muted" style="margin:-4px 2px 0">Each round is one game per court. Only round counts where everyone plays the same number of games are offered.</p>` : ''}
 
         ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${dr.courts} court${dr.courts === 1 ? '' : 's'}
           <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h ${est.minutes % 60 ? `${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? ', plus the final' : ''}</span></div>` : ''}
@@ -1339,7 +1359,7 @@
         if (built.error) return true;
         const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches };
         try {
-          await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Mini Tournament', data });
+          await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Junk Cup', data });
           toast('Tournament created');
           openTournament(dr.id);
         } catch (e) { tournamentError(e, 'Couldn\'t create the tournament.'); }
