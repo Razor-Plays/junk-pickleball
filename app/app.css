@@ -587,7 +587,7 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 
 /* Sessions tab card */
 .t-card {
-  position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; width: 100%; margin: 4px 0 16px; padding: 12px 14px 12px 10px;
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; width: 100%; margin: 4px 0 16px; padding: 12px 14px 12px 12px;
   text-align: left; border: 0; border-radius: 20px; color: #FFF6E5; font: inherit; cursor: pointer;
   background: #092D4A; box-shadow: 0 6px 18px rgba(9, 45, 74, .28);
 }
@@ -599,10 +599,11 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
     linear-gradient(115deg, transparent 93%, rgba(255, 200, 61, .8) 93% 95.5%, transparent 95.5%);
 }
 .t-card > * { position: relative; }
-.t-card-logo { flex: none; width: 64px; height: 64px; }
+.t-card-logo { flex: none; width: 46%; max-width: 190px; height: auto; }
+.t-card-name { display: block; font-weight: 800; font-size: 15px; line-height: 1.2; }
 .t-card-eyebrow { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #FFC83D; margin-bottom: 2px; }
 .t-card .t-word { color: #FFF6E5; }
-.t-card-sub { display: block; font-size: 13px; opacity: .88; margin-top: 3px; }
+.t-card-sub { display: block; font-size: 13px; opacity: .88; margin-top: 2px; }
 .t-card svg { width: 20px; height: 20px; flex: none; }
 .t-live { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; background: #FF6729; color: #fff; letter-spacing: .06em; }
 .t-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: t-pulse 1.2s ease-in-out infinite; }
@@ -611,14 +612,13 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 /* The tournament screen */
 .t-view { padding-top: 0; }
 .t-hero {
-  display: flex; align-items: center; gap: 12px; margin: 0 -16px; padding: 14px 16px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0 -16px; padding: 12px 16px 14px; text-align: center;
   background: var(--cream) url(hero-strokes.svg) center/100% 100% no-repeat; border-bottom: 1px solid var(--line); color: #092D4A;
 }
-.t-hero-logo { flex: none; width: 104px; height: 104px; }
-.t-hero-text { min-width: 0; }
+.t-hero-logo { width: min(330px, 88%); height: auto; }
 .t-hero .t-word { text-shadow: 0 0 0 #FFF6E5, 2px 2px 0 #FFF6E5, -2px -2px 0 #FFF6E5, 2px -2px 0 #FFF6E5, -2px 2px 0 #FFF6E5; overflow-wrap: anywhere; }
 .t-hero .t-word em { color: #F2581C; }
-.t-hero-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.t-hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 2px; }
 .t-hero-chips span { padding: 3px 9px; border-radius: 999px; background: #092D4A; color: #FFF6E5; font-size: 12px; font-weight: 700; }
 :root[data-theme="dark"] .t-hero { filter: brightness(.95); border-bottom-color: transparent; }
 .t-progress { display: flex; align-items: center; gap: 10px; margin: 12px 2px; }
