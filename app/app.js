@@ -1091,6 +1091,23 @@
       </div>`;
   }
 
+  // A round folds away once all its games have scores; tapping it opens it again.
+  // What someone has opened or closed by hand stays that way while the screen is up.
+  state.tFold = {};
+  const tRoundDone = (t, slot) => t.matches.filter((m) => m.slot === slot).every(PT.isScored);
+  const tRoundOpen = (t, slot) => { const k = `${t.id}:${slot}`; return k in state.tFold ? state.tFold[k] : !tRoundDone(t, slot); };
+  const tRoundLine = (t, slot) => {
+    const games = t.matches.filter((m) => m.slot === slot);
+    if (!games.every(PT.isScored)) { const left = games.filter((m) => !PT.isScored(m)).length; return `<span class="muted">${left} game${left === 1 ? '' : 's'} to play</span>`; }
+    return `<span class="t-done">✓</span> ${games.map((m) => `<span class="t-mini"><b>${esc(m.court)}</b> ${m.sa}–${m.sb}</span>`).join('')}`;
+  };
+  document.addEventListener('click', (ev) => {
+    const sum = ev.target.closest && ev.target.closest('details.t-round > summary');
+    if (!sum || !state.tview) return;
+    const det = sum.parentElement;
+    setTimeout(() => { state.tFold[`${state.tview}:${det.dataset.slot}`] = det.open; }, 0);
+  });
+
   function renderTournament(partial = false) {
     const el = $('#sheet');
     const t = (state.tournaments || []).find((x) => x.id === state.tview);
@@ -1104,6 +1121,12 @@
         const row = el.querySelector(`.t-match[data-mid="${m.id}"]`);
         if (row) { row.classList.toggle('a-won', PT.isScored(m) && m.sa > m.sb); row.classList.toggle('b-won', PT.isScored(m) && m.sb > m.sa); }
       }
+      // fold rounds that are now finished, but never the one being typed in
+      el.querySelectorAll('details.t-round').forEach((det) => {
+        const slot = Number(det.dataset.slot);
+        det.querySelector('.t-round-line').innerHTML = tRoundLine(t, slot);
+        if (!det.contains(document.activeElement)) det.open = tRoundOpen(t, slot);
+      });
       return;
     }
     const scroll = el.scrollTop;
@@ -1121,7 +1144,8 @@
     const games = t.matches.filter((m) => m.slot === slot);
     const finals = games[0].stage !== 'group';
     return `
-          <div class="t-round"><div class="t-round-label">${finals ? 'Finals' : `Round ${slot}`}</div>
+          <details class="t-round" data-slot="${slot}" ${tRoundOpen(t, slot) ? 'open' : ''}>
+            <summary><span class="t-round-label">${finals ? 'Finals' : `Round ${slot}`}</span><span class="t-round-line grow">${tRoundLine(t, slot)}</span><span class="chev" aria-hidden="true"></span></summary>
             ${games.map((m) => `
             <div class="t-match${PT.isScored(m) && m.sa > m.sb ? ' a-won' : ''}${PT.isScored(m) && m.sb > m.sa ? ' b-won' : ''}" data-mid="${esc(m.id)}">
               <span class="t-court c-${esc(m.court)}">${esc(m.court)}</span>
@@ -1131,7 +1155,7 @@
                 <div class="t-line b"><span class="grow">${tSide(m.b)}</span>${score(m, 'b')}</div>
               </div>
             </div>`).join('')}
-          </div>`;
+          </details>`;
   }).join('')}
         ${admin ? '<p class="small muted center" style="margin-top:10px">Type both scores for a game; it saves by itself.</p>' : ''}
         <div id="tActions">${tActions(t)}</div>
@@ -1187,6 +1211,10 @@
     if (sa === sb) { toast('A game needs a winner: the scores can\'t be equal', true); return; }
     if (m.sa === sa && m.sb === sb) return;
     commitScore(t.id, m.id, sa, sb);
+  });
+  document.addEventListener('focusout', (ev) => {
+    if (!state.tview || !ev.target.classList || !ev.target.classList.contains('t-score')) return;
+    setTimeout(() => { if (state.tview && $('#tTop')) renderTournament(true); }, 150);
   });
   // While a tournament is on screen, keep it live for people watching.
   setInterval(async () => {
