@@ -585,7 +585,7 @@
           <input type="text" id="dNotes" value="${esc(dr.notes)}" />
         </label>
         ${dr.isNew ? '' : `<button class="btn ghost" data-action="share-session">Share session message</button>`}
-        ${dr.isNew || dr.date > todayISO() ? '' : ((state.tournaments || []).some((x) => x.session_id === dr.id)
+        ${dr.isNew || !((state.tournaments || []).some((x) => x.session_id === dr.id) || dr.date === todayISO()) ? '' : ((state.tournaments || []).some((x) => x.session_id === dr.id)
     ? `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Open this session's Junk Cup</button>`
     : `<button class="btn secondary block" data-action="session-tournament" style="margin-top:8px">🏆 Start a Junk Cup with these players</button>`)}
       </div>
@@ -1203,8 +1203,8 @@
     const today = todayISO();
     const sorted = [...d.sessions].sort((a, b) => a.date.localeCompare(b.date));
     // the session asked for; otherwise today's, or the next one coming up
-    const s = d.sessions.find((x) => x.id === sessionId) || sorted.find((x) => x.date >= today) || sorted[sorted.length - 1];
-    if (!s) { toast('Add a session first', true); return; }
+    const s = sorted.find((x) => x.id === sessionId && x.date >= today) || sorted.find((x) => x.date >= today);
+    if (!s) { toast('Book the next session first: a tournament needs a session today or coming up.', true); return; }
     state.draft = null; state.tview = null;
     state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Junk Cup', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
     tAdoptSession();
@@ -1247,7 +1247,8 @@
     if (!dr) return;
     const scroll = el.scrollTop;
     const today = todayISO();
-    const sessions = [...d.sessions].sort((a, b) => b.date.localeCompare(a.date)).filter((s, i) => s.date >= today || i < 8 || s.id === dr.session_id).slice(0, 12);
+    // only today's session and the ones still to come
+    const sessions = [...d.sessions].filter((s) => s.date >= today).sort((a, b) => a.date.localeCompare(b.date));
     const freq = PB.frequency(d, PB.shiftMonth(today.slice(0, 7), -4) + '-01');
     const known = d.players.filter((p) => p.active).sort((a, b) => (freq.get(b.name) || 0) - (freq.get(a.name) || 0) || a.name.localeCompare(b.name)).map((p) => p.name);
     const names = [...known, ...dr.players.filter((p) => !known.includes(p))];
