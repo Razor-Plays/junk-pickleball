@@ -20,6 +20,16 @@ WhatsApp. Data lives in a Google Sheet, so you can always open it there too.
 | **Court Fees** (the Monthly Tab) | Pick a month. The header shows the sessions, the court cost and, for admins, how much has been collected so far. Below that, one line per player and per member: tap a name for their page, tap the circle when they've paid, and tap the arrow to send their bill on WhatsApp. **Share summary with the group** lists everyone: regulars, guests (with their host) and members. Reclub, warnings and the money check sit at the bottom. |
 | **Club** | Membership hours used / left, record a new membership purchase (any price/hours/rate), kitty balance and spending, players (add, rename, make member, inactive, WhatsApp number), settings, the invite link for another phone, and the on/off switch for the public stats page. |
 
+**Mini tournaments** (Club → Mini Tournaments) turn a session into a small
+competition. Pick the session and the players, then one of two formats:
+*fixed teams* (pairs; everyone plays everyone, then the top two play a final
+and the next two play for third) or *rotating partners* (Americano: a new
+partner every game, each player collects their own points). The app lays the
+games out round by round on courts A and B, shows who is next and who sits
+out, and keeps the table as scores go in. Managers enter scores; everyone
+else can watch from the card at the top of Sessions, which updates by itself.
+The schedule and table logic is in `app/tournament.js`.
+
 Membership credit is tracked in money. The court takes credit off as soon as
 a court is booked and gives it back if the booking is released, so the app
 does the same. When the court
@@ -131,6 +141,7 @@ formula edit.
 | Memberships | id, member, date, amount, hours, rate, notes, kind (`purchase` or `balance`: what the court said was left on that date), covers (for a balance: bookings for later sessions already included, `sessionId:hours,...`) |
 | Payments | month (`YYYY-MM`), person, amount, paid_on, note |
 | Kitty | id, date, description, amount (spending is negative) |
+| Tournaments | id, session_id, name, updated_at, data (JSON: format, players, teams, games and scores). Made automatically the first time it's needed. |
 | Settings | key, value (`club_name`, `default_rate`, `reclub_fee`, `currency`, `pay_to`, `public_stats`, `access_code`, `member_code`) |
 
 ## Development

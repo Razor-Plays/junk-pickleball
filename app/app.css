@@ -575,3 +575,67 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 
 .chip.resting { border-style: dashed; }
 .chip.resting .tag { font-weight: 400; color: var(--muted); font-size: 12px; }
+
+/* ---------- mini tournaments ---------- */
+.t-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin: 4px 0 14px; padding: 12px 14px; text-align: left;
+  border: 0; border-radius: var(--radius); background: var(--bar-bg); color: var(--bar-ink); font: inherit; cursor: pointer; box-shadow: var(--shadow);
+}
+.t-card-cup { font-size: 26px; }
+.t-card-title { display: block; font-weight: 800; font-size: 16px; }
+.t-card-sub { display: block; font-size: 13px; opacity: .85; }
+.t-card svg { width: 20px; height: 20px; flex: none; }
+.t-meta { margin: 0 2px 12px; color: var(--muted); font-size: 14px; }
+.t-podium { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 12px; border-radius: var(--radius); background: var(--yellow); color: #092D4A; }
+.t-podium-cup { font-size: 38px; }
+.t-podium-label { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.t-podium-name { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.t-podium-rest { font-size: 13px; margin-top: 2px; }
+.t-next { padding: 12px 14px; border-radius: var(--radius); background: var(--blue-soft); }
+.t-next-label { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+.t-next-game { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-weight: 700; }
+.t-next .vs, .t-view .vs { font-weight: 400; color: var(--muted); padding: 0 2px; }
+.t-rest { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.amp { color: var(--muted); font-weight: 400; }
+.t-court {
+  flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--bar-bg); color: var(--bar-ink);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
+}
+.t-table-card { padding: 4px 10px; }
+.t-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.t-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; padding: 8px 6px 6px; text-align: right; }
+.t-table td { padding: 8px 6px; text-align: right; border-top: 1px solid var(--line); }
+.t-table th:nth-child(2), .t-table td.nm { text-align: left; }
+.t-table td.rk { width: 22px; color: var(--muted); text-align: left; }
+.t-table td.nm { font-weight: 700; }
+.t-table tbody tr.lead td.nm::after { content: ' 👑'; }
+.t-round { margin-bottom: 12px; }
+.t-round-label { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 2px 6px; }
+.t-match { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.t-sides { flex: 1; min-width: 0; }
+.t-stage { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--orange, #F2581C); }
+.t-line { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.t-line + .t-line { border-top: 1px dashed var(--line); }
+.t-match.a-won .t-line.a, .t-match.b-won .t-line.b { font-weight: 800; }
+.t-match.a-won .t-line.b, .t-match.b-won .t-line.a { color: var(--muted); }
+.t-score {
+  flex: none; width: 56px; padding: 7px 4px; text-align: center; font: inherit; font-weight: 800; font-size: 17px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); -moz-appearance: textfield;
+}
+.t-score::-webkit-outer-spin-button, .t-score::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.t-res { flex: none; min-width: 30px; text-align: right; font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+.btn.danger-text { color: #C2410C; }
+.seg { display: flex; gap: 6px; padding: 4px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+.seg-btn { flex: 1; padding: 9px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.seg-btn.on { background: var(--select-bg); color: var(--select-ink); }
+.seg.small .seg-btn { padding: 7px 10px; min-width: 40px; }
+.t-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.t-teams { display: grid; gap: 8px; }
+.t-team { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.t-team-no { flex: none; width: 24px; font-weight: 800; color: var(--muted); text-align: center; }
+.t-team .chip { flex: 1; justify-content: center; text-align: center; }
+.chip.picked { border-color: var(--orange, #F2581C); box-shadow: 0 0 0 2px var(--orange, #F2581C); font-weight: 700; }
+.t-est { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--blue-soft); font-size: 14px; }
+.t-setup .btn[disabled] { opacity: .45; }
+.t-line .grow, .t-next-game .grow { flex: 1 1 auto; min-width: 0; }
+.t-view input.t-score { flex: 0 0 56px; width: 56px; min-width: 0; margin: 0; }

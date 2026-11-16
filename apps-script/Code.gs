@@ -20,7 +20,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 6;
+const API_VERSION = 7;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -37,6 +37,8 @@ const TABS = {
   Payments: ['month', 'person', 'amount', 'paid_on', 'note'],
   Kitty: ['id', 'date', 'description', 'amount'],
   Settings: ['key', 'value'],
+  // One row per mini tournament; `data` is JSON (teams, games and scores). See app/tournament.js.
+  Tournaments: ['id', 'session_id', 'name', 'updated_at', 'data'],
 };
 
 // Columns kept as plain text so Sheets doesn't turn them into dates/numbers.
@@ -304,6 +306,40 @@ const ACTIONS = {
   },
 
   /** payload: { key: value, ... } — the access code can't be changed from the app. */
+  /** payload: { id?, session_id, name, data: {...} } — creates or replaces a tournament. */
+  saveTournament: function (p) {
+    if (!p.data || typeof p.data !== 'object') throw new Error('Tournament needs its teams and games');
+    const id = String(p.id || newId_('t'));
+    upsertBy_('Tournaments', 'id', id, {
+      id: id, session_id: String(p.session_id || ''), name: String(p.name || 'Mini Tournament').trim(),
+      updated_at: new Date().toISOString(), data: JSON.stringify(p.data),
+    });
+  },
+
+  deleteTournament: function (p) {
+    deleteWhere_('Tournaments', function (r) { return String(r.id) === String(p.id); });
+  },
+
+  /**
+   * payload: { id, match_id, sa, sb } — one game's score (both null clears it).
+   * Only that game is touched, so two phones can enter scores at the same time.
+   */
+  setMatchScore: function (p) {
+    const row = readTable_('Tournaments').filter(function (r) { return String(r.id) === String(p.id); })[0];
+    if (!row) throw new Error('That tournament is no longer there. Refresh and try again.');
+    const data = JSON.parse(row.data || '{}');
+    const match = (data.matches || []).filter(function (m) { return m.id === p.match_id; })[0];
+    if (!match) throw new Error('That game is no longer there. Refresh and try again.');
+    const clear = p.sa === null && p.sb === null;
+    const sa = Number(p.sa), sb = Number(p.sb);
+    if (!clear && !(Number.isInteger(sa) && Number.isInteger(sb) && sa >= 0 && sb >= 0 && sa !== sb)) throw new Error('A score needs two different whole numbers');
+    match.sa = clear ? null : sa;
+    match.sb = clear ? null : sb;
+    row.updated_at = new Date().toISOString();
+    row.data = JSON.stringify(data);
+    upsertBy_('Tournaments', 'id', row.id, row);
+  },
+
   saveSettings: function (p) {
     Object.keys(p).forEach(function (k) {
       if (k === 'access_code' || k === 'member_code') return;
@@ -329,6 +365,7 @@ function loadAll_() {
     memberships: readTable_('Memberships'),
     payments: readTable_('Payments'),
     kitty: readTable_('Kitty'),
+    tournaments: readTable_('Tournaments'),
   };
 }
 
@@ -369,6 +406,7 @@ function memberView_(data) {
         : { month: p.month, person: p.person, amount: p.amount, paid_on: p.paid_on };
     }),
     kitty: [],
+    tournaments: data.tournaments,   // names and scores only
   };
 }
 
@@ -379,7 +417,14 @@ function readSettings_() {
 }
 
 function sheet_(name) {
-  const sh = ss_().getSheetByName(name);
+  let sh = ss_().getSheetByName(name);
+  if (!sh && name === 'Tournaments') {
+    // Added after the sheet was first set up, so it makes itself on first use.
+    sh = ss_().insertSheet(name);
+    sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, sh.getMaxRows(), TABS[name].length).setNumberFormat('@');
+  }
   if (!sh) throw new Error('Missing tab "' + name + '" — run setup()');
   // A tab made before a column was added gets the new columns and headings on first use.
   const headers = TABS[name];

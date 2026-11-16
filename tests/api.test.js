@@ -27,7 +27,7 @@ const session = (extra = {}) => ({
 test('setup creates tabs, defaults and a strong access code', () => {
   const { gas, code } = fresh();
   assert.deepEqual(Object.keys(gas.sheets).sort(),
-    ['Attendance', 'Bookings', 'Kitty', 'Memberships', 'Payments', 'Players', 'Sessions', 'Settings']);
+    ['Attendance', 'Bookings', 'Kitty', 'Memberships', 'Payments', 'Players', 'Sessions', 'Settings', 'Tournaments']);
   assert.match(code, /^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
   gas.setup(); // running it again changes nothing
   assert.equal(gas.accessCode(), code);
@@ -249,4 +249,28 @@ test('top-ups and court balance checks are stored with their kind', () => {
   assert.match(res.data.memberships[1].notes, /^Court balance/);
   assert.equal(call('saveMembership', { member: 'Ann', kind: 'purchase', amount: 0 }).ok, false);
   assert.equal(call('saveMembership', { member: 'Ann', kind: 'balance', amount: 0 }).ok, true);   // a zero balance is allowed
+});
+
+test('tournaments: saved, scored one game at a time, readable by members, tab made on first use', () => {
+  const { gas, call } = fresh();
+  delete gas.sheets.Tournaments;                       // a sheet set up before tournaments existed
+  const data = { format: 'teams', players: ['Ann', 'Ben', 'Cat', 'Dan'], teams: [], matches: [{ id: 'm1', slot: 1, court: 'A', stage: 'group', a: ['Ann', 'Ben'], b: ['Cat', 'Dan'], sa: null, sb: null }, { id: 'm2', slot: 2, court: 'A', stage: 'group', a: ['Ann', 'Cat'], b: ['Ben', 'Dan'], sa: null, sb: null }] };
+  let res = call('saveTournament', { id: 't1', session_id: 's1', name: 'Test Cup', data });
+  assert.equal(res.ok, true);
+  assert.equal(gas.sheets.Tournaments.rows[0].join(), 'id,session_id,name,updated_at,data');
+  assert.deepEqual([res.data.tournaments.length, res.data.tournaments[0].name], [1, 'Test Cup']);
+  // two phones each score a different game: both stick
+  call('setMatchScore', { id: 't1', match_id: 'm1', sa: 11, sb: 7 });
+  res = call('setMatchScore', { id: 't1', match_id: 'm2', sa: 9, sb: 11 });
+  const saved = JSON.parse(res.data.tournaments[0].data);
+  assert.deepEqual(saved.matches.map((m) => [m.sa, m.sb]), [[11, 7], [9, 11]]);
+  assert.equal(call('setMatchScore', { id: 't1', match_id: 'm1', sa: 11, sb: 11 }).ok, false);   // no draws
+  assert.equal(call('setMatchScore', { id: 't1', match_id: 'nope', sa: 1, sb: 2 }).ok, false);
+  res = call('setMatchScore', { id: 't1', match_id: 'm1', sa: null, sb: null });               // clearing a score
+  assert.deepEqual(JSON.parse(res.data.tournaments[0].data).matches[0].sa, null);
+  // members can watch but not touch
+  const memberCode = (gas.sheets.Settings.rows.find((r) => r[0] === 'member_code') || [])[1];
+  assert.equal(gas.post({ code: memberCode, action: 'load' }).data.tournaments[0].name, 'Test Cup');
+  assert.equal(gas.post({ code: memberCode, action: 'setMatchScore', payload: { id: 't1', match_id: 'm1', sa: 1, sb: 2 } }).code, 'readonly');
+  assert.equal(call('deleteTournament', { id: 't1' }).data.tournaments.length, 0);
 });
