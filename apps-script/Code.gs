@@ -30,7 +30,7 @@ const FAILURE_WINDOW_SECONDS = 600; // ... within this rolling window
 
 const TABS = {
   Players: ['name', 'role', 'active', 'phone', 'notes'],
-  Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours'],
+  Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours', 'start_hour'],
   Bookings: ['session_id', 'member', 'hours', 'rate'],
   Attendance: ['session_id', 'name', 'guest', 'pays'],
   Memberships: ['id', 'member', 'date', 'amount', 'hours', 'rate', 'notes', 'kind', 'covers'],
@@ -222,6 +222,7 @@ const ACTIONS = {
       updated_at: new Date().toISOString(),
       location: String(s.location || '').trim(),
       play_hours: Number(s.play_hours) > 0 ? Number(s.play_hours) : '',
+      start_hour: Number(s.start_hour) > 0 ? Number(s.start_hour) : '',
     };
     upsertBy_('Sessions', 'id', id, row);
     replaceChildren_('Bookings', id, (p.bookings || []).filter(function (b) { return Number(b.hours) > 0; })

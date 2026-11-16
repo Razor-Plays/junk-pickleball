@@ -334,3 +334,17 @@ test("a member's page lists their bookings without counting them as fees", () =>
   assert.deepEqual(dec.items.map((i) => [i.kind, i.amount]), [['booking', 280], ['self', 40], ['guest', 40]]);
   assert.deepEqual([dec.games, dec.fees, h.games, h.fees], [1, 80, 1, 80]);
 });
+
+test('WhatsApp poll question', () => {
+  const d = PB.normalize({ ...raw,
+    sessions: [{ id: 'p1', date: '2026-11-18', location: 'Metro City Plaza Phase 3', play_hours: 2 }],
+    bookings: [{ session_id: 'p1', member: 'Ann', hours: 2, rate: 140 }, { session_id: 'p1', member: 'Ben', hours: 2, rate: 140 }],
+    attendance: [] });
+  assert.equal(PB.pollText(d, d.sessions[0]), 'Sign Up! Wed Nov 18 8-10pm (12max, MCP3)');
+  // one court, a different start, another place
+  const one = PB.normalize({ ...raw,
+    sessions: [{ id: 'p2', date: '2026-11-26', location: 'Wong Chuk Hang', play_hours: 2, start_hour: 19.5 }],
+    bookings: [{ session_id: 'p2', member: 'Ann', hours: 2, rate: 140 }], attendance: [] });
+  assert.equal(PB.pollText(one, one.sessions[0]), 'Sign Up! Thu Nov 26 7:30-9:30pm (6max, WCH)');
+  assert.equal(PB.timeRange(11, 2), '11am-1pm');
+});

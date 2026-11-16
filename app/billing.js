@@ -117,6 +117,7 @@
         updated_at: clean(s.updated_at),
         location: clean(s.location),
         play_hours: num(s.play_hours),   // how long the session ran; 0 = not recorded
+        start_hour: num(s.start_hour),   // e.g. 20 = 8pm, 19.5 = 7:30pm; 0 = not recorded (8pm)
       })),
       bookings: (r.bookings || []).filter((b) => clean(b.session_id) && clean(b.member) && num(b.hours) > 0)
         .map((b) => ({
@@ -214,6 +215,40 @@
     const courts = total / length;
     if (Number.isInteger(courts)) return `${courts} court${courts === 1 ? '' : 's'} × ${length}h`;
     return `${total} court-hour${total === 1 ? '' : 's'}`;
+  };
+
+  // Short names for the WhatsApp poll; anywhere else uses its full name.
+  PB.LOCATION_SHORT = {
+    'metro city plaza phase 3': 'MCP3', 'd-park tsuen wan': 'Dpark', 'tin hau': 'Tin Hau', 'wong chuk hang': 'WCH',
+  };
+  PB.PLAYERS_PER_COURT = 6;
+
+  /** 20 -> "8", 19.5 -> "7:30"; and whether it's am or pm. */
+  const clock = (h) => {
+    const hh = Math.floor(h) % 24, mm = Math.round((h - Math.floor(h)) * 60);
+    return { text: `${hh % 12 || 12}${mm ? ':' + String(mm).padStart(2, '0') : ''}`, pm: hh >= 12 };
+  };
+  PB.timeRange = (start, hours) => {
+    const a = clock(start), b = clock(start + hours);
+    return a.pm === b.pm ? `${a.text}-${b.text}${b.pm ? 'pm' : 'am'}` : `${a.text}${a.pm ? 'pm' : 'am'}-${b.text}${b.pm ? 'pm' : 'am'}`;
+  };
+
+  /**
+   * The question Tommy pastes into a WhatsApp poll, e.g.
+   * "Sign Up! Wed Nov 18 8-10pm (12max, MCP3)". 6 players per court.
+   */
+  PB.pollText = (data, session) => {
+    const sum = PB.sessionSummary(data, session);
+    const length = session.play_hours || 2;
+    const start = session.start_hour || 20;
+    const [y, m, d] = session.date.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dt.getUTCDay()];
+    const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+    const courts = sum.hours ? Math.ceil(sum.hours / length) : 0;
+    const where = session.location ? (PB.LOCATION_SHORT[session.location.trim().toLowerCase()] || session.location) : '';
+    const extra = [courts ? `${courts * PB.PLAYERS_PER_COURT}max` : '', where].filter(Boolean).join(', ');
+    return `Sign Up! ${wd} ${mo} ${d} ${PB.timeRange(start, length)}${extra ? ` (${extra})` : ''}`;
   };
 
   /**
