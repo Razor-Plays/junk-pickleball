@@ -1182,6 +1182,26 @@
     if (t.name.trim().toLowerCase() !== 'junk cup') { font(32, 800); c.lineJoin = 'round'; c.strokeStyle = CREAM; c.lineWidth = 10; c.strokeText(t.name, W / 2, top - 18); c.fillStyle = ORANGE; c.fillText(t.name, W / 2, top - 18); }
     return canvas;
   }
+  // The line that goes out with the picture. A different one each time, so it
+  // doesn't read like a form letter; it can be edited in WhatsApp before sending.
+  function tournamentCaption(t, podium, date, pick = Math.random()) {
+    const w = podium[0], second = podium[1];
+    const pair = t.format === 'teams';
+    const when = PB.dayLabel(date);
+    const lines = [
+      `${w} ${pair ? 'take' : 'takes'} the ${t.name}! 🏆 ${when}`,
+      `Bow down. ${w} won the ${t.name} 🏆 (${when})`,
+      `${w} just won the ${t.name}. They'll be unbearable all week 🏆😅`,
+      `Your ${t.name} champ${pair ? 's' : ''}: ${w} 🏆🥒 ${when}`,
+      `${t.name}, ${when}: ${w} on top. Everyone else is buying 🍻`,
+    ];
+    if (second) {
+      lines.push(`${w} ${pair ? 'win' : 'wins'} the ${t.name} 🏆 ${second} ${pair ? 'were' : 'was'} so close 🥈 (${when})`);
+      lines.push(`${t.name} ${when}: 🏆 ${w}, 🥈 ${second}. Rematch next week?`);
+    }
+    return lines[Math.min(lines.length - 1, Math.floor(pick * lines.length))];
+  }
+
   async function shareTournament(t) {
     const canvas = await tournamentPoster(t);
     if (!canvas) return;
@@ -1189,7 +1209,7 @@
     const date = tournamentDate(t) || todayISO();
     const file = new File([blob], `junk-cup-${date}.jpg`, { type: 'image/jpeg' });
     const podium = PT.podium(t);
-    const text = `🏆 ${t.name} ${PB.dayLabel(date)}: ${podium[0]} ${t.format === 'teams' ? 'are' : 'is'} the champion${t.format === 'teams' ? 's' : ''}!`;
+    const text = tournamentCaption(t, podium, date);
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], text }); } catch (e) { /* closed the share sheet */ }
       return;
