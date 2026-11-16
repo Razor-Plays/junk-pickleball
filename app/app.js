@@ -912,7 +912,7 @@
         <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>`, false);
 
     const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)));
-    const tournamentBox = section('club-tournaments', 'Junk Cup', tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments', `
+    const tournamentBox = section('club-tournaments', '<img class="jc-title" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />', tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments', `
         ${tours.length ? `<div class="list">${tours.map((t) => {
     const pr = PT.progress(t); const pod = PT.podium(t);
     return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${esc(t.name)}</div>
@@ -1258,6 +1258,7 @@
     el.innerHTML = `
       <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">Cancel</button><h3>New tournament</h3></div>
       <div class="sheet-body t-setup">
+        <div class="t-hero small"><img class="t-hero-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" /></div>
         <label class="field"><span>Session</span>
           <select id="tSession">${sessions.map((s) => `<option value="${esc(s.id)}"${s.id === dr.session_id ? ' selected' : ''}>${esc(PB.dayLabel(s.date, true))}${s.location ? ` · ${esc(s.location)}` : ''}</option>`).join('')}</select></label>
         <div class="t-roster-note">${dr.fromAttendance
