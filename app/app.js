@@ -299,21 +299,27 @@
     const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const row = (s) => {
       const sum = PB.sessionSummary(d, s, idx);
+      // A booking still to come: managers get a small Poll button in the card instead of "To fill".
+      const poll = d.role !== 'member' && s.date > today && !sum.heads;
       const who = sum.bookings.map((b) => `${b.member}${b.hours !== 1 ? ' ×' + b.hours : ''}`).join(', ');
       const sub = sum.heads
         ? `${sum.heads} players · ${money(sum.cpp)} each · ${PB.courtLabel(sum)}`
         : `${PB.courtLabel(sum)}${who ? ' · ' + who : ''}`;
       const label = PB.dayLabel(s.date, true);
       return `
-        <button class="session" data-action="edit-session" data-id="${esc(s.id)}">
+        <div class="session-wrap">
+        <button class="session${poll ? ' has-poll' : ''}" data-action="edit-session" data-id="${esc(s.id)}">
           <div class="date-block"><span>${esc(label.slice(0, 3).toUpperCase())}</span><b>${Number(s.date.slice(8, 10))}</b><span>${MONTHS[Number(s.date.slice(5, 7)) - 1]}</span></div>
           <div class="grow">
             <div class="title">${esc(label)}</div>
             <div class="sub">${esc(sub)}</div>
             ${s.location ? `<div class="sub place">${ICON.pin}${esc(s.location)}</div>` : ''}
           </div>
-          ${sum.heads ? '' : `<span class="pill todo">${d.role === 'member' ? 'Booked' : 'To fill ›'}</span>`}
-        </button>`;
+          ${sum.heads || poll ? '' : `<span class="pill todo">${d.role === 'member' ? 'Booked' : 'To fill ›'}</span>`}
+        </button>
+        ${poll ? `<button class="poll-chip" data-action="copy-poll" data-id="${esc(s.id)}" aria-label="Copy the WhatsApp poll question for ${esc(label)}" title="Copy the WhatsApp poll question">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h10M5 12h14M5 18h7"/></svg>Poll</button>` : ''}
+        </div>`;
     };
 
     const ro = d.role === 'member';
@@ -341,8 +347,7 @@
     return `
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
       ${tournamentCard()}
-      ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map((s) => row(s) + (ro ? '' : `
-        <button class="poll-btn" data-action="copy-poll" data-id="${esc(s.id)}">${ICON.copy || '📋'} Copy WhatsApp poll</button>`)).join('')}</div>` : ''}
+      ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
       ${suggestionCards}
       <h2>Past sessions</h2>
       ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions played yet.</div>'}
