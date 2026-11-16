@@ -1066,6 +1066,7 @@
           <div class="t-podium-label">${teams ? 'Champions' : 'Champion'}</div>
           <div class="t-podium-name">🏆 ${esc(podium[0])}</div>
           ${podium[1] ? `<div class="t-podium-rest"><span>🥈 ${esc(podium[1])}</span>${podium[2] ? `<span>🥉 ${esc(podium[2])}</span>` : ''}</div>` : ''}
+          <button class="t-share" data-action="t-share">📣 Share the result</button>
         </div>` : ''}
       ${next ? `
         <div class="t-next"><div class="t-next-label">Next up · ${next.games[0].stage === 'group' ? `Round ${next.slot}` : 'Finals'}</div>
@@ -1089,6 +1090,117 @@
         <button class="btn ghost" data-action="t-replace">Replace a player</button>
         <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
       </div>`;
+  }
+
+  // ---- the result as a picture to share (drawn on a canvas, 1080 x 1350)
+  const loadImage = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);   // the poster still works without a picture
+    img.src = src;
+  });
+  async function tournamentPoster(t) {
+    const podium = PT.podium(t);
+    if (!podium.length) return null;
+    const teams = t.format === 'teams';
+    const W = 1080, H = 1350;
+    const NAVY = '#092D4A', ORANGE = '#F2581C', OCEAN = '#13A5C5', YELLOW = '#FFC83D', CREAM = '#FFF6E5';
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const c = canvas.getContext('2d');
+    const family = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif';
+    const font = (px, weight = 800, italic = false) => { c.font = `${italic ? 'italic ' : ''}${weight} ${px}px ${family}`; };
+    // text that shrinks until it fits
+    const fit = (text, maxWidth, px, weight, italic) => {
+      let size = px;
+      do { font(size, weight, italic); size -= 2; } while (c.measureText(text).width > maxWidth && size > 24);
+      return size + 2;
+    };
+    const spaced = (text, x, y, gap) => {   // centred, letter-spaced capitals
+      const chars = [...text];
+      const width = chars.reduce((w, ch) => w + c.measureText(ch).width + gap, -gap);
+      let at = x - width / 2;
+      c.textAlign = 'left';
+      for (const ch of chars) { c.fillText(ch, at, y); at += c.measureText(ch).width + gap; }
+      c.textAlign = 'center';
+    };
+    const round = (x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
+
+    const [logo, strokes, ball] = await Promise.all([loadImage('junk-cup.webp'), loadImage('hero-strokes.svg'), loadImage('ball.svg')]);
+
+    // paper and brush strokes, top and bottom
+    c.fillStyle = CREAM; c.fillRect(0, 0, W, H);
+    if (strokes) {
+      c.drawImage(strokes, 0, 0, W, 430);
+      c.save(); c.translate(W, H); c.rotate(Math.PI); c.drawImage(strokes, 0, 0, W, 230); c.restore();
+    }
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    if (logo) { const w = 860, h = (w * logo.height) / logo.width; c.drawImage(logo, (W - w) / 2, 70, w, h); }
+
+    // the champions card
+    const top = 400, cardH = 390;
+    const final = (t.matches || []).find((m) => m.stage === 'final');
+    const finalLine = final && PT.isScored(final) ? `won the final ${Math.max(final.sa, final.sb)}–${Math.min(final.sa, final.sb)}` : '';
+    c.save(); c.shadowColor = 'rgba(9,45,74,.25)'; c.shadowBlur = 40; c.shadowOffsetY = 14;
+    c.fillStyle = YELLOW; round(70, top, W - 140, cardH, 44); c.fill(); c.restore();
+    c.strokeStyle = NAVY; c.lineWidth = 8; round(70, top, W - 140, cardH, 44); c.stroke();
+    for (const [x, y, r, col] of [[130, top + 60, 13, ORANGE], [950, top + 54, 13, OCEAN], [118, top + 320, 10, OCEAN], [962, top + 330, 11, ORANGE], [210, top + 34, 8, CREAM], [870, top + 362, 8, CREAM], [985, top + 190, 8, NAVY], [96, top + 196, 8, NAVY]]) {
+      c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    }
+    c.fillStyle = NAVY; font(40, 800); spaced(teams ? 'CHAMPIONS' : 'CHAMPION', W / 2, top + 88, 12);
+    font(96, 400); c.fillText('🏆', W / 2, top + 196);
+    fit(podium[0], W - 260, 92, 900, true); c.fillStyle = NAVY; c.fillText(podium[0], W / 2, top + (finalLine ? 296 : 312));
+    if (finalLine) { font(32, 700); c.fillText(finalLine, W / 2, top + 348); }
+
+    // runners-up
+    let y = top + cardH + 92;
+    const medal = (label, colour, name, place) => {
+      const size = fit(name, W - 420, 58, 800, false);
+      const width = c.measureText(name).width;
+      const left = W / 2 - (width + 96) / 2;
+      c.fillStyle = colour; c.beginPath(); c.arc(left + 36, y - size * 0.34, 36, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = NAVY; c.lineWidth = 5; c.stroke();
+      c.fillStyle = NAVY; font(38, 900); c.fillText(label, left + 36, y - size * 0.34 + 14);
+      font(size, 800); c.textAlign = 'left'; c.fillText(name, left + 96, y); c.textAlign = 'center';
+      font(26, 700); c.fillStyle = '#5A6E80'; spaced(place, W / 2, y + 44, 5); c.fillStyle = NAVY;
+      y += 138;
+    };
+    if (podium[1]) medal('2', '#C9D2DA', podium[1], teams ? 'RUNNERS-UP' : 'RUNNER-UP');
+    if (podium[2]) medal('3', '#E0A26B', podium[2], 'THIRD PLACE');
+
+    // details strip
+    const date = tournamentDate(t);
+    const bits = [date ? PB.dayLabel(date, true) : '', tFormatName(t), `Games to ${t.points_to || 11}`, `${(t.players || []).length} players`].filter(Boolean);
+    c.fillStyle = NAVY; round(110, H - 232, W - 220, 80, 40); c.fill();
+    c.fillStyle = CREAM; fit(bits.join('  ·  '), W - 300, 34, 700, false); c.fillText(bits.join('  ·  '), W / 2, H - 180);
+    // club line
+    const club = state.data.settings.club_name || 'Junk Pickleball';
+    font(36, 900, true);
+    const cw = c.measureText(club).width;
+    if (ball) c.drawImage(ball, W / 2 - cw / 2 - 56, H - 120, 52, 52);
+    c.fillStyle = NAVY; c.fillText(club, W / 2 + (ball ? 24 : 0), H - 80);
+    if (t.name.trim().toLowerCase() !== 'junk cup') { font(32, 800); c.lineJoin = 'round'; c.strokeStyle = CREAM; c.lineWidth = 10; c.strokeText(t.name, W / 2, top - 18); c.fillStyle = ORANGE; c.fillText(t.name, W / 2, top - 18); }
+    return canvas;
+  }
+  async function shareTournament(t) {
+    const canvas = await tournamentPoster(t);
+    if (!canvas) return;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    const date = tournamentDate(t) || todayISO();
+    const file = new File([blob], `junk-cup-${date}.jpg`, { type: 'image/jpeg' });
+    const podium = PT.podium(t);
+    const text = `🏆 ${t.name} ${PB.dayLabel(date)}: ${podium[0]} ${t.format === 'teams' ? 'are' : 'is'} the champion${t.format === 'teams' ? 's' : ''}!`;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text }); } catch (e) { /* closed the share sheet */ }
+      return;
+    }
+    // no share sheet here (e.g. a computer): save the picture instead
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Picture saved. Send it to the group from your photos or downloads.');
   }
 
   // A round folds away once all its games have scores; tapping it opens it again.
@@ -1405,6 +1517,11 @@
           toast('Tournament created');
           openTournament(dr.id);
         } catch (e) { tournamentError(e, 'Couldn\'t create the tournament.'); }
+        return true;
+      }
+      case 't-share': {
+        const cur = state.tournaments.find((x) => x.id === state.tview);
+        if (cur) { t.disabled = true; try { await shareTournament(cur); } finally { t.disabled = false; } }
         return true;
       }
       case 't-finals': case 't-delete': case 't-replace': {
