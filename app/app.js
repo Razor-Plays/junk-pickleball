@@ -1605,11 +1605,13 @@
     const byMonth = new Map(h.months.map((m) => [m.month, m]));
     const peak = Math.max(1, ...span.map((m) => (byMonth.get(m) || { games: 0 }).games));
     const share = h.totalSessions ? Math.round((h.games / h.totalSessions) * 100) : 0;
+    // Each fact: an icon, what it is, and the answer in bold.
+    const dayName = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
     const facts = [
-      h.totalSessions ? `Played ${h.games} of the ${h.totalSessions} sessions since joining (${share}%)` : '',
-      h.favouriteDay ? `Usually a ${({ Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' })[h.favouriteDay]} player` : '',
-      h.busiestMonth && h.busiestMonth.games > 1 ? `Busiest month: ${PB.monthLabel(h.busiestMonth.month)} (${h.busiestMonth.games} sessions)` : '',
-      h.favouritePlace ? `Most often at ${esc(h.favouritePlace)}` : '',
+      h.totalSessions ? { icon: '🎯', label: 'Turnout since joining', value: `${h.games} of ${h.totalSessions} sessions`, side: `${share}%`, bar: share } : null,
+      h.favouriteDay ? { icon: '🏓', label: 'Usual day', value: dayName[h.favouriteDay] } : null,
+      h.busiestMonth && h.busiestMonth.games > 1 ? { icon: '🔥', label: 'Busiest month', value: PB.monthLabel(h.busiestMonth.month), side: `${h.busiestMonth.games} sessions` } : null,
+      h.favouritePlace ? { icon: '📍', label: 'Most often at', value: esc(h.favouritePlace) } : null,
     ].filter(Boolean);
     const line = (i) => `<button class="glance-row" data-action="view-session" data-id="${esc(i.session)}" data-from="${esc(name)}"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
       i.kind === 'booking' ? `booked ${i.hours} court-hour${i.hours === 1 ? '' : 's'}` : i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
@@ -1631,7 +1633,12 @@
           <div class="stat"><div class="label">Court fees, all time</div><div class="value">${money(h.fees)}</div></div>
           <div class="stat"><div class="label">Average per session</div><div class="value">${h.games ? money(h.perGame) : '—'}</div></div>
         </div>
-        ${facts.length ? `<div class="card facts">${facts.map((f) => `<div>${f}</div>`).join('')}</div>` : ''}
+        ${facts.length ? `<div class="card facts">${facts.map((f) => `
+          <div class="fact"><span class="fact-icon" aria-hidden="true">${f.icon}</span>
+            <div class="grow"><div class="fact-label">${f.label}</div>
+              <div class="fact-value"><span>${f.value}</span>${f.side ? `<span class="fact-side">${f.side}</span>` : ''}</div>
+              ${f.bar !== undefined ? `<div class="bar"><i style="width:${f.bar}%"></i></div>` : ''}</div>
+          </div>`).join('')}</div>` : ''}
 
         <h2>Sessions per month</h2>
         <div class="card">
