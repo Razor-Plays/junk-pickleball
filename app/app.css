@@ -669,7 +669,17 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 .t-table th:nth-child(2), .t-table td.nm { text-align: left; }
 .t-table td.rk { width: 30px; color: var(--muted); text-align: left; }
 .t-table td.nm { font-weight: 700; }
-.t-round { margin-bottom: 12px; }
+.t-round { margin-bottom: 10px; }
+.t-round > summary { display: flex; align-items: center; gap: 10px; padding: 4px 2px 8px; cursor: pointer; list-style: none; }
+.t-round > summary::-webkit-details-marker { display: none; }
+.t-round:not([open]) > summary { padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.t-round > summary .t-round-label { margin: 0; flex: none; }
+.t-round-line { flex: 1; min-width: 0; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-done { color: var(--good); font-weight: 900; margin-right: 2px; }
+.t-mini { margin-right: 10px; }
+.t-mini b { color: var(--muted); font-weight: 800; }
+.t-round > summary .chev { flex: none; width: 9px; height: 9px; border-right: 2.5px solid var(--muted); border-bottom: 2.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s ease; margin-right: 4px; }
+.t-round[open] > summary .chev { transform: rotate(45deg); }
 .t-round-label { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); background: var(--blue-soft); padding: 3px 10px; border-radius: 999px; margin: 0 0 6px; }
 .t-match { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
 .t-sides { flex: 1; min-width: 0; }
@@ -710,3 +720,7 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 .t-hero.small { padding: 8px 16px 10px; margin-bottom: 14px; }
 .t-hero.small .t-hero-logo { width: min(230px, 64%); }
 details.club-section > summary .grow:has(.jc-title) { align-items: center; }
+/* tighter game cards, so a round takes less of the screen */
+.t-view input.t-score { height: 38px; padding: 0 4px; }
+.t-match { padding: 6px 12px; margin-bottom: 6px; }
+.t-line { padding: 2px 0; }
