@@ -8,7 +8,6 @@
     cache: 'jpb.cache',
     theme: 'jpb.theme',
     notRegular: 'jpb.notRegular',
-    tab: 'jpb.tab',
   };
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -21,7 +20,7 @@
     code: store.get(LS.code) || '',
     raw: null,
     data: null,
-    tab: store.get(LS.tab) || 'sessions',
+    tab: 'sessions',   // always start on Sessions when the app is opened
     month: null,
     busy: false,
     draft: null,      // session being edited
@@ -1588,7 +1587,6 @@
     const tabBtn = ev.target.closest('[data-tab]');
     if (tabBtn) {
       state.tab = tabBtn.dataset.tab;
-      store.set(LS.tab, state.tab);
       render();
       window.scrollTo(0, 0);
       return;

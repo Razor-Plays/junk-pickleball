@@ -705,7 +705,7 @@ details.suggest-fold .list { margin: 0; border: 0; border-top: 1px solid var(--l
 
 /* Junk Cup logo as the Club section's title, and a slim banner on the setup screen */
 .club-section-title:has(.jc-title) { display: inline-flex; align-items: center; }
-.jc-title { display: block; height: 40px; width: auto; margin: -6px 0; }
+.jc-title { display: block; height: 36px; width: auto; margin: -6px 0; }
 .t-setup { padding-top: 0; }
 .t-hero.small { padding: 8px 16px 10px; margin-bottom: 14px; }
 .t-hero.small .t-hero-logo { width: min(230px, 64%); }
