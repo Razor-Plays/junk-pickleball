@@ -325,29 +325,11 @@
     const balances = PB.membershipBalances(d).filter((b) => b.active);
     const low = ro ? [] : balances.filter((b) => b.hasCredit && b.hoursLeft <= 8);
 
-    let skipped = [];
-    try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
-    const suggestions = ro ? [] : PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 3);
-    // Folded unless it was opened last time (remembered per phone).
-    const suggestionsOpen = store.get('jpb.open.regulars') === '1';
-    const suggestionCards = suggestions.length ? `
-      <details class="glance suggest-fold" data-glance="regulars" ${suggestionsOpen ? 'open' : ''}>
-        <summary><span class="chev" aria-hidden="true"></span><span class="grow">Promote to Regular <span class="count">· ${suggestions.length}</span></span></summary>
-      <div class="list">${suggestions.map((g, i) => `
-        <div class="row">
-          <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
-          <div class="grow"><div class="title">${esc(g.name)}</div>
-            <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
-          <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}" aria-label="Promote ${esc(g.name)} to a regular">Promote</button>
-          <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
-        </div>`).join('')}</div>
-      </details>` : '';
 
     return `
       ${low.length ? `<button class="alert" data-tab="club">${ICON.bell}<span class="grow">Credit running low: ${low.map((b) => `<b>${esc(b.name)} ≈${b.hoursLeft}h</b>`).join(', ')}</span>${ICON.chevron}</button>` : ''}
       ${tournamentCard()}
       ${upcoming.length ? `<h2>Coming up</h2><div class="sessions">${upcoming.map(row).join('')}</div>` : ''}
-      ${suggestionCards}
       <h2>Past sessions</h2>
       ${past.length ? `<div class="sessions">${shown.map(row).join('')}</div>` : '<div class="empty">No sessions played yet.</div>'}
       ${past.length > shown.length ? '<button class="btn ghost block" data-action="show-all">Show all past sessions</button>' : ''}
@@ -643,8 +625,14 @@
           pays: g.pays === '__self' ? g.name.trim() : g.pays,
         }))),
     };
+    const wasSuggested = new Set(PB.regularSuggestions(d).map((g) => g.name));
+    const guestNames = new Set(dr.guests.map((g) => g.name.trim()));
     const ok = await save('saveSession', payload, 'Session saved');
     if (ok) {
+      let skippedNames = [];
+      try { skippedNames = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skippedNames = []; }
+      const nowDue = PB.regularSuggestions(state.data).find((g) => guestNames.has(g.name) && !wasSuggested.has(g.name) && !skippedNames.includes(g.name));
+      if (nowDue) setTimeout(() => promotePrompt(nowDue), 400);
       state.draft = null;
       renderSheet();
       render();
@@ -902,7 +890,23 @@
           <button class="btn ghost" data-action="add-kitty">＋ Add spending (balls etc.)</button>
         </div>`, true);
 
+    let skipped = [];
+    try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
+    const suggestions = PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 5);
+    const promoteBlock = suggestions.length ? `
+        <div class="promote-box">
+          <div class="promote-title">⭐ Promote to Regular</div>
+          <div class="list">${suggestions.map((g, i) => `
+            <div class="row">
+              <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
+              <div class="grow"><div class="title">${esc(g.name)}</div>
+                <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
+              <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}" aria-label="Promote ${esc(g.name)} to a regular">Promote</button>
+              <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
+            </div>`).join('')}</div>
+        </div>` : '';
     const playersBox = section('club-players', 'Players', `${active.length} active${inactive.length ? ` · ${inactive.length} inactive` : ''}`, `
+        ${promoteBlock}
         <input type="search" id="pSearch" placeholder="Find a player" autocomplete="off" style="margin-bottom:8px" />
         <div class="list" id="playerList">
           ${active.map(playerRow).join('')}
@@ -1694,6 +1698,35 @@
 
   // A guest who keeps coming becomes a regular. Their past visits follow them
   // (renamed too, if the name is changed here).
+  // Shown once, right after a session save takes a guest to their third visit.
+  function promotePrompt(g) {
+    const old = $('#promotePrompt'); if (old) old.remove();
+    const box = document.createElement('div');
+    box.id = 'promotePrompt';
+    box.className = 'prompt-back';
+    box.innerHTML = `
+      <div class="prompt-card" role="dialog" aria-labelledby="promptTitle">
+        <div class="prompt-icon" aria-hidden="true">⭐</div>
+        <div class="prompt-title" id="promptTitle">${esc(g.name)} has played ${g.count} times!</div>
+        <p class="prompt-text">Make ${esc(g.name)} a regular? They'll get their own bill${g.pays !== g.name ? ` instead of going on ${esc(g.pays)}'s` : ''} and can be ticked like everyone else.</p>
+        <div class="prompt-buttons">
+          <button class="btn ghost" data-prompt="later">Not now</button>
+          <button class="btn" data-prompt="promote">Promote</button>
+        </div>
+      </div>`;
+    box.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-prompt]');
+      if (!b && ev.target !== box) return;
+      box.remove();
+      if (b && b.dataset.prompt === 'promote') { promoteGuest(g.name); return; }
+      // "Not now" (or tapping outside): don't ask again; it stays in Club → Players
+      let skipped = [];
+      try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
+      store.set(LS.notRegular, JSON.stringify(skipped.concat(g.name)));
+    });
+    document.body.appendChild(box);
+  }
+
   function promoteGuest(guestName) {
     const g = PB.knownGuests(state.data).find((x) => x.name === guestName);
     if (!g) return;
