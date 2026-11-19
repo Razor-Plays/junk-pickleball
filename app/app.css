@@ -749,7 +749,7 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .t-manage .btn-row { margin-top: 8px; justify-content: center; }
 
 /* Club → Players: guests ready to become regulars */
-.promote-box { margin-bottom: 12px; padding: 10px 12px 4px; border-radius: 14px; background: var(--warn-bg); }
+.promote-box { margin: 14px 0 4px; padding: 10px 12px 4px; border-radius: 14px; background: var(--warn-bg); }
 .promote-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--warn-ink); margin: 0 2px 8px; }
 .promote-box .list { margin-bottom: 8px; }
 
