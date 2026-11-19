@@ -906,13 +906,13 @@
             </div>`).join('')}</div>
         </div>` : '';
     const playersBox = section('club-players', 'Players', `${active.length} active${inactive.length ? ` · ${inactive.length} inactive` : ''}`, `
-        ${promoteBlock}
         <input type="search" id="pSearch" placeholder="Find a player" autocomplete="off" style="margin-bottom:8px" />
         <div class="list" id="playerList">
           ${active.map(playerRow).join('')}
           ${inactive.length ? `<div class="tab-group">Inactive</div>${inactive.map(playerRow).join('')}` : ''}
         </div>
-        <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>`, false);
+        <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>
+        ${promoteBlock}`, false);
 
     const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)));
     const tournamentBox = section('club-tournaments', '<img class="jc-title" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />', tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments', `
