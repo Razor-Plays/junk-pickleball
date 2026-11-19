@@ -747,3 +747,19 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .t-manage > summary::after { content: ' ▾'; }
 .t-manage[open] > summary::after { content: ' ▴'; }
 .t-manage .btn-row { margin-top: 8px; justify-content: center; }
+
+/* Club → Players: guests ready to become regulars */
+.promote-box { margin-bottom: 12px; padding: 10px 12px 4px; border-radius: 14px; background: var(--warn-bg); }
+.promote-title { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--warn-ink); margin: 0 2px 8px; }
+.promote-box .list { margin-bottom: 8px; }
+
+/* "has played 3 times" prompt after saving a session */
+.prompt-back { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(7, 30, 43, .5); animation: busy-in .15s ease; }
+.prompt-card { width: min(360px, 100%); background: var(--card); color: var(--ink); border-radius: 22px; padding: 22px 20px 16px; text-align: center;
+  box-shadow: 0 12px 36px rgba(7, 30, 43, .35); }
+.prompt-icon { font-size: 40px; line-height: 1; }
+.prompt-title { margin-top: 8px; font-size: 20px; font-weight: 800; }
+.prompt-text { margin: 8px 0 16px; color: var(--muted); font-size: 15px; }
+.prompt-buttons { display: flex; gap: 10px; }
+.prompt-buttons .btn { flex: 1; }
