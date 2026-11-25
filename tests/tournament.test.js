@@ -109,3 +109,37 @@ test('fixed teams can meet more than once, and the default fills a session', () 
   assert.deepEqual([3, 4, 5, 6].map((n) => PT.teamsDefaultTimes(n, 2, 11)), [2, 2, 1, 1]);
   assert.deepEqual(PT.estimate(twice, 11), { games: 6, slots: 6, minutes: 90, perGame: 15, courts: 1 });
 });
+
+test('rotating partners: shorter or longer nights, ranked by points per game', () => {
+  // 9 players, 2 courts: only 9 rounds is even; 7 rounds means some play 6, some 7
+  assert.deepEqual(PT.americanoRounds(9), [9]);
+  const all = PT.americanoAllRounds(9);
+  assert.deepEqual(all.filter((o) => o.even).map((o) => o.rounds), [9]);
+  const seven = all.find((o) => o.rounds === 7);
+  assert.deepEqual([seven.games, seven.min, seven.max, seven.even], [14, 6, 7, false]);
+  const players = names(9);
+  const m = PT.buildAmericano(players, 7, 2);
+  noClash(m);
+  const games = new Map();
+  for (const x of m) for (const p of [...x.a, ...x.b]) games.set(p, (games.get(p) || 0) + 1);
+  assert.deepEqual([...new Set(players.map((p) => games.get(p)))].sort(), [6, 7]);
+  // by total points a 7-game player would win; by points per game the 6-game player does
+  const t = { format: 'americano', ranking: 'average', players: ['A', 'B', 'C', 'D', 'E'], matches: [
+    { id: 'm1', slot: 1, court: 'A', stage: 'group', a: ['A', 'B'], b: ['C', 'D'], sa: 11, sb: 9 },
+    { id: 'm2', slot: 2, court: 'A', stage: 'group', a: ['A', 'C'], b: ['B', 'E'], sa: 11, sb: 9 },
+    { id: 'm3', slot: 3, court: 'A', stage: 'group', a: ['A', 'D'], b: ['C', 'E'], sa: 6, sb: 11 },
+    { id: 'm4', slot: 4, court: 'A', stage: 'group', a: ['B', 'D'], b: ['E', 'C'], sa: 2, sb: 11 },
+  ] };
+  // A: 28 pts in 3 games (9.3); E: 31 pts in 3 (10.3); C: 9+11+11+11=42 in 4 (10.5)
+  const table = PT.standings(t);
+  assert.deepEqual(table.slice(0, 3).map((x) => [x.name, x.avg]), [['C', 10.5], ['E', 10.3], ['A', 9.3]]);
+  assert.equal(PT.standings({ ...t, ranking: undefined })[0].name, 'C');   // C also leads on total points here
+  assert.equal(PT.standings({ ...t, ranking: undefined })[1].name, 'E');
+});
+
+test('suggested rounds fit a session', () => {
+  assert.equal(PT.americanoBest(8), 7);     // even, 1h45
+  assert.equal(PT.americanoBest(9), 7);     // even would be 9 rounds (2h15), so 7
+  assert.equal(PT.americanoBest(10), 5);    // even and fits
+  assert.equal(PT.americanoBest(9, 2, 15), 5);
+});
