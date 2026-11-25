@@ -149,15 +149,46 @@
     return out;
   };
   /** What a number of rounds means: games in total, games per player, and how often each sits out. */
+  /**
+   * What a number of rounds means: games in total, the fewest and most games
+   * anyone plays, and sit-outs. `even` = everyone plays the same number.
+   */
   PT.americanoLoad = (n, rounds, courts = 2) => {
     const playing = Math.min(courts, Math.floor(n / 4)) * 4;
-    return { games: (rounds * playing) / 4, each: (rounds * playing) / n, sits: rounds - (rounds * playing) / n };
+    const slots = rounds * playing;
+    const min = Math.floor(slots / n), max = Math.ceil(slots / n);
+    return { games: slots / 4, each: min, min, max, even: min === max, sits: rounds - max, maxSits: rounds - min };
+  };
+
+  /**
+   * Every round count from 3 to 12. The even ones (everyone plays the same
+   * number of games) come first in the app; the others are shorter or longer
+   * nights where some play one game fewer, ranked by points per game.
+   */
+  PT.americanoAllRounds = (n, courts = 2) => {
+    const playing = Math.min(courts, Math.floor(n / 4)) * 4;
+    if (!playing) return [];
+    const out = [];
+    for (let r = 3; r <= 12; r += 1) out.push({ rounds: r, ...PT.americanoLoad(n, r, courts) });
+    return out;
   };
   PT.americanoDefault = (n, courts = 2) => {
     const options = PT.americanoRounds(n, courts);
     if (!options.length) return 0;
     const ideal = Math.min(courts, Math.floor(n / 4)) * 4 === n ? Math.min(n - 1, 8) : 8;   // n-1 = partner everyone once
     return options.filter((r) => r <= ideal).pop() || options[0];
+  };
+
+  /**
+   * The rounds to suggest: the even option if it fits a session (about 1h45
+   * at the usual minutes a game), otherwise the most rounds that do fit.
+   */
+  PT.americanoBest = (n, courts = 2, pointsTo = 11, limit = 105) => {
+    const even = PT.americanoDefault(n, courts);
+    const per = PT.minutesPerGame(pointsTo);
+    if (even && even * per <= limit) return even;
+    const fits = PT.americanoAllRounds(n, courts).filter((o) => o.rounds * per <= limit);
+    return fits.length ? fits[fits.length - 1].rounds : even;
   };
 
   /**
@@ -225,7 +256,7 @@
   PT.standings = (t) => {
     const rows = new Map();
     const row = (key, name) => {
-      if (!rows.has(key)) rows.set(key, { key, name, played: 0, won: 0, lost: 0, pf: 0, pa: 0, diff: 0 });
+      if (!rows.has(key)) rows.set(key, { key, name, played: 0, won: 0, lost: 0, pf: 0, pa: 0, diff: 0, avg: 0 });
       return rows.get(key);
     };
     if (t.format === 'teams') for (const team of t.teams || []) row(team.id, PT.teamName(team.players));
@@ -237,13 +268,17 @@
         : [m.a.map((p) => row(p, p)), m.b.map((p) => row(p, p))];
       sides.forEach((side, i) => side.forEach((x) => {
         const mine = i === 0 ? m.sa : m.sb, theirs = i === 0 ? m.sb : m.sa;
-        x.played += 1; x.pf += mine; x.pa += theirs; x.diff = x.pf - x.pa;
+        x.played += 1; x.pf += mine; x.pa += theirs; x.diff = x.pf - x.pa; x.avg = Math.round((x.pf / x.played) * 10) / 10;
         if (mine > theirs) x.won += 1; else x.lost += 1;
       }));
     }
     const list = [...rows.values()];
     if (t.format === 'teams') list.sort((a, b) => b.won - a.won || b.diff - a.diff || b.pf - a.pf || a.name.localeCompare(b.name));
-    else list.sort((a, b) => b.pf - a.pf || b.won - a.won || b.diff - a.diff || a.name.localeCompare(b.name));
+    else if (t.ranking === 'average') {
+      // some play one game fewer, so compare points per game (then win rate, then difference per game)
+      const per = (x, k) => (x.played ? x[k] / x.played : 0);
+      list.sort((a, b) => per(b, 'pf') - per(a, 'pf') || per(b, 'won') - per(a, 'won') || per(b, 'diff') - per(a, 'diff') || a.name.localeCompare(b.name));
+    } else list.sort((a, b) => b.pf - a.pf || b.won - a.won || b.diff - a.diff || a.name.localeCompare(b.name));
     return list.map((x, i) => ({ ...x, rank: i + 1 }));
   };
 

@@ -1056,6 +1056,7 @@
     const next = PT.nextUp(t);
     const table = PT.standings(t);
     const teams = t.format === 'teams';
+    const avg = !teams && t.ranking === 'average';
     const date = tournamentDate(t);
     const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     return `
@@ -1078,12 +1079,13 @@
           ${next.resting.length ? `<div class="t-rest">Sitting out: ${next.resting.map(esc).join(', ')}</div>` : ''}</div>` : ''}
       <h2>Standings</h2>
       <div class="card t-table-card"><table class="t-table">
-        <thead><tr><th></th><th>${teams ? 'Team' : 'Player'}</th>${teams ? '<th>W</th><th>L</th><th>+/−</th>' : '<th>Pts</th><th>W</th><th>+/−</th>'}</tr></thead>
+        <thead><tr><th></th><th>${teams ? 'Team' : 'Player'}</th>${teams ? '<th>W</th><th>L</th><th>+/−</th>' : avg ? '<th>Avg</th><th>Pts</th><th>GP</th>' : '<th>Pts</th><th>W</th><th>+/−</th>'}</tr></thead>
         <tbody>${table.map((x) => `<tr${x.rank === 1 && x.played ? ' class="lead"' : ''}><td class="rk">${x.played && x.rank <= 3 ? `<span class="t-medal m${x.rank}">${x.rank}</span>` : x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
     ? `<td><b>${x.won}</b></td><td>${x.lost}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`
-    : `<td><b>${x.pf}</b></td><td>${x.won}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`}</tr>`).join('')}</tbody>
+    : avg ? `<td><b>${x.avg.toFixed(1)}</b></td><td>${x.pf}</td><td>${x.played}</td>`
+      : `<td><b>${x.pf}</b></td><td>${x.won}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`}</tr>`).join('')}</tbody>
       </table></div>
-      <p class="small muted" style="margin:6px 2px 0">${teams ? 'Ranked by wins, then point difference.' : 'Ranked by your own points, then wins.'}</p>`;
+      <p class="small muted" style="margin:6px 2px 0">${teams ? 'Ranked by wins, then point difference.' : avg ? 'Ranked by points per game (Avg), since some play one game fewer. GP = games played.' : 'Ranked by your own points, then wins.'}</p>`;
   }
 
   function tActions(t) {
@@ -1404,9 +1406,10 @@
       return { teams, times, matches: PT.buildTeams(teams, dr.courts, times) };
     }
     if (n < 4) return { error: 'Pick at least 4 players.' };
-    const options = PT.americanoRounds(n, dr.courts);
-    if (!options.includes(dr.rounds)) dr.rounds = PT.americanoDefault(n, dr.courts);
-    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts), options };
+    const options = PT.americanoAllRounds(n, dr.courts);
+    if (!options.some((o) => o.rounds === dr.rounds)) dr.rounds = PT.americanoBest(n, dr.courts, dr.points_to);
+    const load = PT.americanoLoad(n, dr.rounds, dr.courts);
+    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts), options, even: load.even };
   }
   function renderTournamentSetup() {
     const el = $('#sheet');
@@ -1464,8 +1467,13 @@
         <p class="small muted" style="margin:6px 2px 0">${built.teams.length} teams: ${(built.teams.length - 1) * built.times} games each${built.teams.length % 2 ? ', and one team rests each round' : ''}.</p>` : ''}
         ${!built.error && dr.format === 'americano' ? `
         <label class="field" style="margin-top:14px"><span>Rounds</span>
-          <select id="tRounds">${built.options.map((r) => { const g = PT.americanoLoad(dr.players.length, r, dr.courts); return `<option value="${r}"${r === dr.rounds ? ' selected' : ''}>${r} rounds · ${g.games} games · ${g.each} each${g.sits ? `, sit out ${g.sits}` : ''}</option>`; }).join('')}</select></label>
-        <p class="small muted" style="margin:-4px 2px 0">Each round is one game per court. Only round counts where everyone plays the same number of games are offered.</p>` : ''}
+          <select id="tRounds">${(() => {
+    const label = (o) => `${o.rounds} rounds · ${o.games} games · ${o.even ? `${o.each} each` : `${o.min}–${o.max} each`}${o.maxSits ? `, sit out ${o.sits === o.maxSits ? o.sits : `${o.sits}–${o.maxSits}`}` : ''}`;
+    const opt = (o) => `<option value="${o.rounds}"${o.rounds === dr.rounds ? ' selected' : ''}>${label(o)}</option>`;
+    const even = built.options.filter((o) => o.even), uneven = built.options.filter((o) => !o.even);
+    return `${even.length ? `<optgroup label="Everyone plays the same">${even.map(opt).join('')}</optgroup>` : ''}${uneven.length ? `<optgroup label="Shorter or longer (ranked by points per game)">${uneven.map(opt).join('')}</optgroup>` : ''}`;
+  })()}</select></label>
+        <p class="small muted" style="margin:-4px 2px 0">${built.even ? 'Each round is one game per court. Everyone plays the same number of games.' : 'Each round is one game per court. Some play one game fewer, so the table ranks by <b>points per game</b>, not total points.'}</p>` : ''}
 
         ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${est.courts} court${est.courts === 1 ? '' : 's'}
           <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h${est.minutes % 60 ? ` ${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? `, plus ${est.perGame}m for the final` : ''}</span>
@@ -1506,13 +1514,13 @@
       }
       case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
       case 't-format': dr.format = t.dataset.v; dr.pick = null; renderTournamentSetup(); return true;
-      case 't-points': dr.points_to = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-points': dr.points_to = Number(t.dataset.v); dr.rounds = 0; renderTournamentSetup(); return true;
       case 't-times': dr.times = Number(t.dataset.v); renderTournamentSetup(); return true;
-      case 't-courts': dr.courts = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-courts': dr.courts = Number(t.dataset.v); dr.rounds = 0; renderTournamentSetup(); return true;
       case 't-toggle': {
         const n = t.dataset.name;
         dr.players = dr.players.includes(n) ? dr.players.filter((x) => x !== n) : dr.players.concat(n);
-        dr.pick = null; dr.times = 0;   // a different number of teams: pick the best fit again
+        dr.pick = null; dr.times = 0; dr.rounds = 0;   // a different number of players: pick the best fit again
         renderTournamentSetup(); return true;
       }
       case 't-add-guest': {
@@ -1520,7 +1528,7 @@
         if (!n) return true;
         const same = [...state.data.players.map((p) => p.name), ...dr.players].find((x) => x.toLowerCase() === n.toLowerCase());
         if (same) { if (!dr.players.includes(same)) dr.players.push(same); } else dr.players.push(n);
-        dr.times = 0;
+        dr.times = 0; dr.rounds = 0;
         renderTournamentSetup(); return true;
       }
       case 't-shuffle': dr.players = PT.shuffle(dr.players); dr.pick = null; renderTournamentSetup(); return true;
@@ -1538,7 +1546,7 @@
       case 't-create': {
         const built = tDraftBuild(dr);
         if (built.error) return true;
-        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches, ...(built.times ? { times: built.times } : {}) };
+        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches, ...(dr.format === 'americano' && !built.even ? { ranking: 'average' } : {}), ...(built.times ? { times: built.times } : {}) };
         try {
           await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Junk Cup', data });
           toast('Tournament created');
