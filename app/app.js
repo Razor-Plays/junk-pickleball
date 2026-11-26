@@ -808,25 +808,65 @@
       </div>`;
   }
 
-  // The Junk Cup section on the Club tab: every tournament, newest first, each opening the full
-  // tournament screen. Managers also get "New tournament"; players get it read-only.
+  // One line per cup: the champion once decided, otherwise how far it's got.
+  const cupRow = (t, from = '') => {
+    const pr = PT.progress(t); const pod = PT.podium(t);
+    const named = t.name.trim().toLowerCase() !== 'junk cup';
+    return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"${from ? ` data-from="${from}"` : ''}><div class="grow"><div class="title">${pod.length ? '🏆 ' : ''}${esc(pod.length ? pod[0] : t.name)}</div>
+            <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? (named ? esc(t.name) : 'Champion' + (t.format === 'teams' ? 's' : '')) : `${pr.done}/${pr.total} games played`}</div></div>${ICON.chevron}</button>`;
+  };
+  const allCups = () => [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)) || b.id.localeCompare(a.id));
+
+  // The Junk Cup section on the Club tab: this month's cups (or the last 3 if none this month),
+  // then "See all Junk Cups" for the full history. Managers also get "New tournament".
   function junkCupBox(admin) {
-    const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)) || b.id.localeCompare(a.id));
+    const tours = allCups();
     if (!admin && !tours.length) return '';
+    const month = todayISO().slice(0, 7);
+    const thisMonth = tours.filter((t) => tournamentDate(t).slice(0, 7) === month);
+    const recent = thisMonth.length ? thisMonth : tours.slice(0, 3);
     const saved = store.get('jpb.open.club-tournaments');
     const open = saved === null ? false : saved !== '0';
-    const list = tours.length ? `<div class="list">${tours.map((t) => {
-      const pr = PT.progress(t); const pod = PT.podium(t);
-      return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${pod.length ? '🏆 ' : ''}${esc(pod.length ? pod[0] : t.name)}</div>
-            <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? (t.name.trim().toLowerCase() !== 'junk cup' ? esc(t.name) : 'Champion' + (t.format === 'teams' ? 's' : '')) : `${pr.done}/${pr.total} games played`}</div></div>${ICON.chevron}</button>`;
-    }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Turn a session into a Junk Cup: fixed teams of two, or a new partner every game.</p>';
+    const summary = !tours.length ? 'tournaments' : thisMonth.length ? `${thisMonth.length} this month` : `${tours.length} tournament${tours.length === 1 ? '' : 's'}`;
+    const list = tours.length ? `
+          ${thisMonth.length ? '' : '<div class="tab-group" style="margin-top:0">Latest</div>'}
+          <div class="list">${recent.map((t) => cupRow(t)).join('')}</div>
+          <button class="btn ghost block" data-action="cup-archive" style="margin-top:6px">See all Junk Cups (${tours.length}) ›</button>`
+      : '<p class="small muted" style="margin:0 2px 10px">Turn a session into a Junk Cup: fixed teams of two, or a new partner every game.</p>';
     return `
       <details class="club-section" data-glance="club-tournaments" ${open ? 'open' : ''}>
         <summary><span class="chev" aria-hidden="true"></span><span class="grow"><span class="club-section-title"><img class="jc-title" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" /></span>
-          <span class="club-section-sum">${tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments'}</span></span></summary>
+          <span class="club-section-sum">${summary}</span></span></summary>
         <div class="club-section-body">${list}
           ${admin ? '<button class="btn secondary block" data-action="new-tournament" style="margin-top:10px">＋ New tournament</button>' : ''}</div>
       </details>`;
+  }
+
+  // Every Junk Cup, grouped by month (newest month open). Opening a cup and going back returns here.
+  function openCupArchive() {
+    const el = $('#sheet');
+    state.draft = null; state.tdraft = null; state.tview = null;
+    el.classList.remove('stats-sheet');
+    const byMonth = new Map();
+    for (const t of allCups()) {
+      const m = (tournamentDate(t) || todayISO()).slice(0, 7);
+      if (!byMonth.has(m)) byMonth.set(m, []);
+      byMonth.get(m).push(t);
+    }
+    const months = [...byMonth.entries()];
+    el.innerHTML = `
+      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>All Junk Cups</h3></div>
+      <div class="sheet-body">
+        <div class="t-hero small"><img class="t-hero-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" /></div>
+        ${months.map(([m, cups], i) => `
+        <details class="glance cup-month"${i === 0 ? ' open' : ''}>
+          <summary><span class="chev" aria-hidden="true"></span><span class="grow">${esc(PB.monthLabel(m))} <span class="count">· ${cups.length} cup${cups.length === 1 ? '' : 's'}</span></span></summary>
+          <div class="list">${cups.map((t) => cupRow(t, 'archive')).join('')}</div>
+        </details>`).join('') || '<p class="muted center">No Junk Cups yet.</p>'}
+      </div>`;
+    el.hidden = false;
+    el.scrollTop = 0;
+    document.body.style.overflow = 'hidden';
   }
 
   function renderClub() {
@@ -1334,7 +1374,7 @@
       ? `<input class="t-score" type="number" inputmode="numeric" min="0" max="99" data-mid="${esc(m.id)}" data-side="${side}" value="${m[side === 'a' ? 'sa' : 'sb'] ?? ''}" aria-label="Score for ${esc(m[side].join(' and '))}" />`
       : `<span class="t-res">${m[side === 'a' ? 'sa' : 'sb'] ?? '–'}</span>`);
     el.innerHTML = `
-      <div class="sheet-head"><button class="btn ghost" data-action="close-sheet">‹ Back</button><h3>Tournament</h3></div>
+      <div class="sheet-head"><button class="btn ghost" data-action="${state.sheetBack ? 'sheet-back' : 'close-sheet'}">‹ Back</button><h3>Tournament</h3></div>
       <div class="sheet-body t-view">
         <div id="tTop">${tTop(t)}</div>
         <h2>Games</h2>
@@ -1578,7 +1618,8 @@
   async function tournamentAction(a, t) {
     const dr = state.tdraft;
     switch (a) {
-      case 'open-tournament': openTournament(t.dataset.id); return true;
+      case 'open-tournament': state.sheetBack = t.dataset.from === 'archive' ? openCupArchive : null; openTournament(t.dataset.id); return true;
+      case 'cup-archive': state.sheetBack = null; openCupArchive(); return true;
       case 'new-tournament': newTournament(); return true;
       case 'session-tournament': {
         // From the session editor: save who's ticked first, so the roster is what's on screen.

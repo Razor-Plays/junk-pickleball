@@ -810,3 +810,6 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .t-pgame.lost .t-pgame-score small { color: var(--accent-ink); }
 .t-pgame .grow { flex: 1; min-width: 0; line-height: 1.35; }
 .t-pgame-score { min-width: 64px; }
+
+/* All Junk Cups: one fold per month */
+.cup-month .list { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
