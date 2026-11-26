@@ -1403,13 +1403,13 @@
       const teams = PT.pairUp(dr.players);
       // how often teams meet: chosen by the manager, otherwise whatever fills the session best
       const times = dr.times || PT.teamsDefaultTimes(teams.length, dr.courts, dr.points_to);
-      return { teams, times, matches: PT.buildTeams(teams, dr.courts, times) };
+      return { teams, times, matches: PT.buildTeams(teams, dr.courts, times, dr.late || []) };
     }
     if (n < 4) return { error: 'Pick at least 4 players.' };
     const options = PT.americanoAllRounds(n, dr.courts);
     if (!options.some((o) => o.rounds === dr.rounds)) dr.rounds = PT.americanoBest(n, dr.courts, dr.points_to);
     const load = PT.americanoLoad(n, dr.rounds, dr.courts);
-    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts), options, even: load.even };
+    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts, dr.late || []), options, even: load.even };
   }
   function renderTournamentSetup() {
     const el = $('#sheet');
@@ -1454,6 +1454,9 @@
           <input type="text" id="tGuest" placeholder="Someone else (a guest)" autocomplete="off" />
           <button class="btn secondary compact" data-action="t-add-guest">Add</button>
         </div>
+        ${dr.players.length >= 4 ? `
+        <div class="chip-label" style="margin-top:14px">Arriving late? Tap anyone who'll miss the start: they sit out Round 1</div>
+        <div class="chips">${dr.players.map((n) => `<button class="chip late-chip${(dr.late || []).includes(n) ? ' on' : ''}" data-action="t-late" data-name="${esc(n)}">${(dr.late || []).includes(n) ? '⏰ ' : ''}${esc(n)}</button>`).join('')}</div>` : ''}
 
         ${built.error ? `<div class="warn-box" style="margin-top:14px">${esc(built.error)}</div>` : ''}
         ${!built.error && dr.format === 'teams' ? `
@@ -1513,6 +1516,11 @@
         return true;
       }
       case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
+      case 't-late': {
+        const n = t.dataset.name;
+        dr.late = (dr.late || []).includes(n) ? dr.late.filter((x) => x !== n) : (dr.late || []).concat(n);
+        renderTournamentSetup(); return true;
+      }
       case 't-format': dr.format = t.dataset.v; dr.pick = null; renderTournamentSetup(); return true;
       case 't-points': dr.points_to = Number(t.dataset.v); dr.rounds = 0; renderTournamentSetup(); return true;
       case 't-times': dr.times = Number(t.dataset.v); renderTournamentSetup(); return true;
@@ -1520,6 +1528,7 @@
       case 't-toggle': {
         const n = t.dataset.name;
         dr.players = dr.players.includes(n) ? dr.players.filter((x) => x !== n) : dr.players.concat(n);
+        dr.late = (dr.late || []).filter((x) => dr.players.includes(x));
         dr.pick = null; dr.times = 0; dr.rounds = 0;   // a different number of players: pick the best fit again
         renderTournamentSetup(); return true;
       }
@@ -1546,7 +1555,7 @@
       case 't-create': {
         const built = tDraftBuild(dr);
         if (built.error) return true;
-        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, teams: built.teams, matches: built.matches, ...(dr.format === 'americano' && !built.even ? { ranking: 'average' } : {}), ...(built.times ? { times: built.times } : {}) };
+        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, late: dr.late || [], teams: built.teams, matches: built.matches, ...(dr.format === 'americano' && !built.even ? { ranking: 'average' } : {}), ...(built.times ? { times: built.times } : {}) };
         try {
           await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Junk Cup', data });
           toast('Tournament created');

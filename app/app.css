@@ -763,3 +763,6 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .prompt-text { margin: 8px 0 16px; color: var(--muted); font-size: 15px; }
 .prompt-buttons { display: flex; gap: 10px; }
 .prompt-buttons .btn { flex: 1; }
+
+.chip.late-chip { font-size: 14px; padding: 6px 12px; }
+.chip.late-chip.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
