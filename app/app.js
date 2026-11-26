@@ -1284,6 +1284,11 @@
         ${slots.map((slot) => {
     const games = t.matches.filter((m) => m.slot === slot);
     const finals = games[0].stage !== 'group';
+    // who isn't on court this round (teams format: whole teams; finals: nobody listed)
+    const busy = new Set(games.flatMap((m) => [...m.a, ...m.b]));
+    const sitting = finals ? [] : t.format === 'teams'
+      ? (t.teams || []).filter((tm) => !tm.players.some((p) => busy.has(p))).map((tm) => PT.teamName(tm.players))
+      : (t.players || []).filter((p) => !busy.has(p));
     return `
           <details class="t-round" data-slot="${slot}" ${tRoundOpen(t, slot) ? 'open' : ''}>
             <summary><span class="t-round-label">${finals ? 'Finals' : `Round ${slot}`}</span><span class="t-round-line grow">${tRoundLine(t, slot)}</span><span class="chev" aria-hidden="true"></span></summary>
@@ -1296,6 +1301,7 @@
                 <div class="t-line b"><span class="grow">${tSide(m.b)}</span>${score(m, 'b')}</div>
               </div>
             </div>`).join('')}
+            ${sitting.length ? `<div class="t-sitting"><span class="t-sitting-label">Sitting out</span> ${sitting.map(esc).join(', ')}</div>` : ''}
           </details>`;
   }).join('')}
         ${admin ? '<p class="small muted center" style="margin-top:10px">Type both scores for a game; it saves by itself.</p>' : ''}

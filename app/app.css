@@ -781,3 +781,5 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .round-sum-tag { margin-top: 3px; font-size: 13px; color: var(--accent-ink); }
 .round-sum-tag.even { color: var(--good); }
 .round-sum-sub { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.t-sitting { margin: -2px 2px 4px; padding: 6px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 14px; }
+.t-sitting-label { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
