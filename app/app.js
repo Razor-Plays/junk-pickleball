@@ -892,18 +892,23 @@
 
     let skipped = [];
     try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
-    const suggestions = PB.regularSuggestions(d).filter((g) => !skipped.includes(g.name)).slice(0, 5);
-    const promoteBlock = suggestions.length ? `
+    const allSuggestions = PB.regularSuggestions(d);
+    const suggestions = allSuggestions.filter((g) => !skipped.includes(g.name)).slice(0, 5);
+    const hiddenCount = allSuggestions.filter((g) => skipped.includes(g.name)).length;
+    const unhide = hiddenCount ? `<button class="btn ghost compact" data-action="unskip-regulars" style="margin:0 0 6px">Show ${hiddenCount} hidden</button>` : '';
+    const promoteBlock = suggestions.length || hiddenCount ? `
         <div class="promote-box">
           <div class="promote-title">⭐ Promote to Regular</div>
-          <div class="list">${suggestions.map((g, i) => `
+          ${suggestions.length ? '' : '<p class="small muted" style="margin:0 2px 6px">Everyone due for promotion is hidden.</p>'}
+          <div class="list"${suggestions.length ? '' : ' hidden'}>${suggestions.map((g, i) => `
             <div class="row">
               <span class="avatar${i % 2 ? ' alt' : ''}" aria-hidden="true">${esc(g.name.slice(0, 1).toUpperCase())}</span>
               <div class="grow"><div class="title">${esc(g.name)}</div>
                 <div class="sub">${g.count} visits${g.pays !== g.name ? ` · with ${esc(g.pays)}` : ''}</div></div>
               <button class="btn secondary compact" data-action="promote-guest" data-name="${esc(g.name)}" aria-label="Promote ${esc(g.name)} to a regular">Promote</button>
-              <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Not now" title="Not now">✕</button>
+              <button class="icon-btn muted" data-action="skip-regular" data-name="${esc(g.name)}" aria-label="Hide ${esc(g.name)}" title="Hide">✕</button>
             </div>`).join('')}</div>
+          ${unhide}
         </div>` : '';
     const playersBox = section('club-players', 'Players', `${active.length} active${inactive.length ? ` · ${inactive.length} inactive` : ''}`, `
         <input type="search" id="pSearch" placeholder="Find a player" autocomplete="off" style="margin-bottom:8px" />
@@ -1812,10 +1817,8 @@
       if (!b && ev.target !== box) return;
       box.remove();
       if (b && b.dataset.prompt === 'promote') { promoteGuest(g.name); return; }
-      // "Not now" (or tapping outside): don't ask again; it stays in Club → Players
-      let skipped = [];
-      try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
-      store.set(LS.notRegular, JSON.stringify(skipped.concat(g.name)));
+      // "Not now" (or tapping outside) just closes it; the suggestion stays in Club → Players.
+      // Only the ✕ there hides someone, and that can be undone.
     });
     document.body.appendChild(box);
   }
@@ -1959,6 +1962,7 @@
         break;
       }
       case 'promote-guest': promoteGuest(t.dataset.name); break;
+      case 'unskip-regulars': store.del(LS.notRegular); render(); break;
       case 'skip-regular': {
         let skipped = [];
         try { skipped = JSON.parse(store.get(LS.notRegular) || '[]'); } catch (e) { skipped = []; }
