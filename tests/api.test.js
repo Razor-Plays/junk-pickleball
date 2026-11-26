@@ -274,3 +274,19 @@ test('tournaments: saved, scored one game at a time, readable by members, tab ma
   assert.equal(gas.post({ code: memberCode, action: 'setMatchScore', payload: { id: 't1', match_id: 'm1', sa: 1, sb: 2 } }).code, 'readonly');
   assert.equal(call('deleteTournament', { id: 't1' }).data.tournaments.length, 0);
 });
+
+test('stats feed carries Junk Cup results, guests masked', () => {
+  const { gas, call } = fresh();
+  call('savePlayer', { name: 'Ann', role: 'member', active: true });
+  call('savePlayer', { name: 'Cat', role: 'player', active: true });
+  call('saveSession', session());
+  call('saveSettings', { public_stats: true });
+  const m = (id, a, b, sa, sb) => ({ id, slot: 1, court: 'A', stage: 'group', a, b, sa, sb });
+  call('saveTournament', { id: 't1', session_id: 's1', name: 'Junk Cup', data: { format: 'americano', players: ['Ann', 'Cat', 'Zed', 'Yan'], teams: [], matches: [m('m1', ['Ann', 'Zed'], ['Cat', 'Yan'], 11, 4)] } });
+  const feed = gas.get({ view: 'stats' });
+  assert.equal(feed.tournaments.length, 1);
+  const t = feed.tournaments[0];
+  assert.deepEqual([t.date, t.name, t.players], ['2026-11-12', 'Junk Cup', ['Ann', 'Cat', 'Guest 1', 'Guest 2']]);
+  assert.deepEqual(t.matches[0].a, ['Ann', 'Guest 1']);
+  assert.equal(JSON.stringify(feed).includes('Zed'), false);
+});

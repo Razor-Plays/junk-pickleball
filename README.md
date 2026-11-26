@@ -125,7 +125,7 @@ Reclub fee, phone numbers or notes. **Club → Share** has a link for each code.
   change it in the sheet and send a new invite link.
 - After 30 wrong codes in 10 minutes the API refuses everything for a while.
 - The stats page gets one feed without the code: first names and the dates
-  they played. No money, phone numbers or notes, and guests appear as
+  they played, plus finished Junk Cup results (teams, games and scores). No money, phone numbers or notes, and guests appear as
   "Guest 1", "Guest 2". Turn it off in **Club → Settings** (or set
   `public_stats` to `FALSE` in the sheet).
 

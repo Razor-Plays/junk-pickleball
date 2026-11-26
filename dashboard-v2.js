@@ -527,6 +527,65 @@
     `).join('');
   }
 
+  // ---- Junk Cup: only cups with a winner count. Uses app/tournament.js (window.PT).
+  function renderJunkCup() {
+    const section = $('#cupSection');
+    const PT = window.PT;
+    const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const nice = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MON[m - 1]} ${y}`; };
+    const cups = (state.cups || []).filter(() => PT).map((t) => ({ t, podium: PT.podium(t) }))
+      .filter((x) => x.podium.length).sort((a, b) => b.t.date.localeCompare(a.t.date));
+    if (!cups.length) { section.hidden = true; return; }
+    section.hidden = false;
+    const fmt = (t) => (t.format === 'americano' ? 'Rotating partners' : 'Fixed teams');
+    // the players behind a podium name ("Jana & Tommy" -> both)
+    const people = (t, name) => {
+      const team = (t.teams || []).find((x) => PT.teamName(x.players) === name);
+      return team ? team.players : [name];
+    };
+    const finalScore = (t) => {
+      const f = (t.matches || []).find((m) => m.stage === 'final');
+      return f && PT.isScored(f) ? `final ${Math.max(f.sa, f.sb)}–${Math.min(f.sa, f.sb)}` : '';
+    };
+
+    const latest = cups[0];
+    $('#cupChampion').innerHTML = `
+      <div class="cup-champ">
+        <img src="app/junk-cup.webp" alt="Junk Cup" width="1200" height="363" />
+        <div class="lbl">${latest.t.format === 'teams' ? 'Latest champions' : 'Latest champion'}</div>
+        <div class="who">🏆 ${esc(latest.podium[0])}</div>
+        <div class="meta">${esc(nice(latest.t.date))} · ${fmt(latest.t)}${finalScore(latest.t) ? ` · ${finalScore(latest.t)}` : ''}${latest.podium[1] ? ` · 🥈 ${esc(latest.podium[1])}` : ''}</div>
+      </div>`;
+
+    // titles: every player on a podium, ranked by wins, then runner-up, then third
+    const tally = new Map();
+    for (const { t, podium } of cups) {
+      podium.forEach((name, place) => {
+        for (const p of people(t, name)) {
+          if (/^Guest \d+$/.test(p)) continue;
+          const row = tally.get(p) || { name: p, gold: 0, silver: 0, bronze: 0 };
+          row[['gold', 'silver', 'bronze'][place]] += 1;
+          tally.set(p, row);
+        }
+      });
+    }
+    const rows = [...tally.values()].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.name.localeCompare(b.name));
+    $('#cupTitles').innerHTML = rows.slice(0, 10).map((r, i) => `
+      <div class="cup-row"><span class="cup-rank${r.gold && i === 0 ? ' r1' : ''}">${i + 1}</span>
+        <div class="grow nm">${esc(r.name)}</div>
+        <div class="cup-medals">${r.gold ? `<span>🏆 ${r.gold}</span>` : ''}${r.silver ? `<span>🥈 ${r.silver}</span>` : ''}${r.bronze ? `<span>🥉 ${r.bronze}</span>` : ''}</div></div>`).join('')
+      || '<div class="cup-row"><div class="grow sub">No titles yet.</div></div>';
+
+    $('#cupHall').innerHTML = cups.map(({ t, podium }) => {
+      const [y, m, d] = t.date.split('-').map(Number);
+      return `
+      <div class="cup-row"><div class="cup-date">${d}<small>${MON[m - 1].toUpperCase()} ${String(y).slice(2)}</small></div>
+        <div class="grow"><div class="nm">🏆 ${esc(podium[0])}</div>
+          <div class="sub">${podium[1] ? `🥈 ${esc(podium[1])} · ` : ''}${t.name.trim().toLowerCase() !== 'junk cup' ? `${esc(t.name)} · ` : ''}${fmt(t)}${finalScore(t) ? ` · ${finalScore(t)}` : ''}</div></div></div>`;
+    }).join('');
+  }
+
   function renderAllTimeGreats(players) {
     const el = $('#allTimeGrid');
     const streakLegend = topBy(players, (p) => p.longestStreak, { minValue: 1 });
@@ -682,6 +741,7 @@
     // A session shows up as soon as its players are entered in the app, even the same evening.
     const rows = json.rows || [];
     const last = json.last_session || '';
+    state.cups = json.tournaments || [];
     return {
       attendanceRows: rows,
       metaRows: last ? [{ last_sync_date: last }] : [],
@@ -732,6 +792,7 @@
   }
 
   function applyAndRender() {
+    try { renderJunkCup(); } catch (e) { $('#cupSection').hidden = true; }
     const { from, to } = getDateFilters();
     state.sessions = buildSessions(state.rawRows, from, to);
     state.players = buildPlayerStats(state.sessions);
