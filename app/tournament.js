@@ -143,13 +143,14 @@
   };
 
   /** Round counts where everyone ends up with the same number of games. */
+  PT.MAX_ROUNDS = 10;   // a club night: more than this doesn't fit
   PT.americanoRounds = (n, courts = 2) => {
     const playing = Math.min(courts, Math.floor(n / 4)) * 4;
     if (!playing) return [];
     const gcd = (a, b) => (b ? gcd(b, a % b) : a);
     const step = n / gcd(n, playing);            // rounds until everyone has sat out equally
     const out = [];
-    if (step === 1) { for (let r = 3; r <= 12; r += 1) out.push(r); } else { for (let r = step; r <= 12; r += step) out.push(r); }
+    if (step === 1) { for (let r = 3; r <= PT.MAX_ROUNDS; r += 1) out.push(r); } else { for (let r = step; r <= PT.MAX_ROUNDS; r += step) out.push(r); }
     return out;
   };
   /** What a number of rounds means: games in total, games per player, and how often each sits out. */
@@ -173,7 +174,7 @@
     const playing = Math.min(courts, Math.floor(n / 4)) * 4;
     if (!playing) return [];
     const out = [];
-    for (let r = 3; r <= 12; r += 1) out.push({ rounds: r, ...PT.americanoLoad(n, r, courts) });
+    for (let r = 3; r <= PT.MAX_ROUNDS; r += 1) out.push({ rounds: r, ...PT.americanoLoad(n, r, courts) });
     return out;
   };
   PT.americanoDefault = (n, courts = 2) => {

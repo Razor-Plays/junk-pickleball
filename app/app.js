@@ -1469,14 +1469,18 @@
         <div class="seg">${[[1, 'Once'], [2, 'Twice'], [3, '3 times']].map(([v, label]) => seg('t-times', v, label, built.times === v)).join('')}</div>
         <p class="small muted" style="margin:6px 2px 0">${built.teams.length} teams: ${(built.teams.length - 1) * built.times} games each${built.teams.length % 2 ? ', and one team rests each round' : ''}.</p>` : ''}
         ${!built.error && dr.format === 'americano' ? `
-        <label class="field" style="margin-top:14px"><span>Rounds</span>
-          <select id="tRounds">${(() => {
-    const label = (o) => `${o.rounds} rounds · ${o.games} games · ${o.even ? `${o.each} each` : `${o.min}–${o.max} each`}${o.maxSits ? `, sit out ${o.sits === o.maxSits ? o.sits : `${o.sits}–${o.maxSits}`}` : ''}`;
-    const opt = (o) => `<option value="${o.rounds}"${o.rounds === dr.rounds ? ' selected' : ''}>${label(o)}</option>`;
-    const even = built.options.filter((o) => o.even), uneven = built.options.filter((o) => !o.even);
-    return `${even.length ? `<optgroup label="Everyone plays the same">${even.map(opt).join('')}</optgroup>` : ''}${uneven.length ? `<optgroup label="Shorter or longer (ranked by points per game)">${uneven.map(opt).join('')}</optgroup>` : ''}`;
-  })()}</select></label>
-        <p class="small muted" style="margin:-4px 2px 0">${built.even ? 'Each round is one game per court. Everyone plays the same number of games.' : 'Each round is one game per court. Some play one game fewer, so the table ranks by <b>points per game</b>, not total points.'}</p>` : ''}
+        <div class="chip-label" style="margin-top:16px">Rounds</div>
+        <div class="round-pick">${built.options.map((o) => `<button class="round-btn${o.rounds === dr.rounds ? ' on' : ''}${o.even ? ' even' : ''}" data-action="t-rounds" data-v="${o.rounds}" aria-label="${o.rounds} rounds${o.even ? ', everyone plays the same' : ''}">${o.rounds}</button>`).join('')}</div>
+        ${(() => {
+    const o = built.options.find((x) => x.rounds === dr.rounds) || {};
+    const mins = o.games ? Math.ceil(o.games / Math.min(dr.courts, Math.floor(dr.players.length / 4))) * PT.minutesPerGame(dr.points_to) : 0;
+    const time = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}` : `${mins}m`;
+    return `<div class="round-sum">
+          <div class="round-sum-main"><b>${o.games} games</b> · ${o.even ? `${o.each} each` : `${o.min}–${o.max} each`}${o.maxSits ? ` · sit out ${o.sits === o.maxSits ? o.sits : `${o.sits}–${o.maxSits}`}` : ''} · about ${time}</div>
+          <div class="round-sum-tag ${o.even ? 'even' : ''}">${o.even ? '● Everyone plays the same number of games' : '○ Some play one game fewer, so the table ranks by points per game'}</div>
+        </div>`;
+  })()}
+        <p class="small muted" style="margin:6px 2px 0">● = everyone plays the same. Each round is one game per court.</p>` : ''}
 
         ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${est.courts} court${est.courts === 1 ? '' : 's'}
           <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h${est.minutes % 60 ? ` ${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? `, plus ${est.perGame}m for the final` : ''}</span>
@@ -1496,7 +1500,6 @@
     if (ev.target.id === 'tName') dr.name = ev.target.value;
     if (type !== 'change') return;
     if (ev.target.id === 'tSession') { dr.session_id = ev.target.value; dr.players = []; tAdoptSession(true); renderTournamentSetup(); }
-    if (ev.target.id === 'tRounds') { dr.rounds = Number(ev.target.value); renderTournamentSetup(); }
   }));
 
   /** Tournament buttons. Returns true when the action was one of ours. */
@@ -1516,6 +1519,7 @@
         return true;
       }
       case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
+      case 't-rounds': dr.rounds = Number(t.dataset.v); renderTournamentSetup(); return true;
       case 't-late': {
         const n = t.dataset.name;
         dr.late = (dr.late || []).includes(n) ? dr.late.filter((x) => x !== n) : (dr.late || []).concat(n);
