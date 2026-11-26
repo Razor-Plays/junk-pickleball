@@ -20,7 +20,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 7;
+const API_VERSION = 8;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -142,7 +142,35 @@ function publicStats_() {
     if (date > latest) latest = date;
     rows.push({ session_date: date, session_id: a.session_id, player_name: name });
   });
-  return { ok: true, club_name: settings.club_name || '', last_session: latest, rows: rows };
+  return { ok: true, club_name: settings.club_name || '', last_session: latest, rows: rows, tournaments: publicTournaments_(dates, players) };
+}
+
+/**
+ * Junk Cup results for the stats page: teams, games and scores only. Anyone
+ * not on the Players tab shows as "Guest 1", "Guest 2"... within each cup.
+ */
+function publicTournaments_(dates, players) {
+  return readTable_('Tournaments').map(function (r) {
+    let d = {};
+    try { d = JSON.parse(r.data || '{}'); } catch (e) { return null; }
+    const guests = {};
+    const who = function (n) {
+      const known = players[nameKey_(n)];
+      if (known) return known;
+      if (!guests[n]) guests[n] = 'Guest ' + (Object.keys(guests).length + 1);
+      return guests[n];
+    };
+    const list = function (a) { return (a || []).map(who); };
+    return {
+      id: r.id, date: dates[r.session_id] || '', name: r.name || 'Junk Cup',
+      format: d.format, points_to: d.points_to, ranking: d.ranking || '',
+      players: list(d.players),
+      teams: (d.teams || []).map(function (t) { return { id: t.id, players: list(t.players) }; }),
+      matches: (d.matches || []).map(function (m) {
+        return { id: m.id, slot: m.slot, court: m.court, stage: m.stage, a: list(m.a), b: list(m.b), ta: m.ta || '', tb: m.tb || '', sa: m.sa, sb: m.sb };
+      }),
+    };
+  }).filter(function (t) { return t && t.date; });
 }
 
 // Unique even for two saves in the same millisecond.

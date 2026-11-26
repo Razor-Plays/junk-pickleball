@@ -71,6 +71,28 @@
     .award-stat{font-size:12px;color:var(--ink)}
     .award-note{font-size:12px;color:var(--muted)}
 
+    /* Junk Cup: latest champions, titles table, hall of fame */
+    .cup-champ{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:16px 26px 18px;border-radius:20px;background:#FFC83D;color:#092D4A;box-shadow:var(--shadow);
+      background-image:radial-gradient(circle at 6% 20%,#FF6729 0 5px,transparent 6px),radial-gradient(circle at 94% 16%,#13A5C5 0 5px,transparent 6px),radial-gradient(circle at 3% 55%,#13A5C5 0 4px,transparent 5px),radial-gradient(circle at 97% 50%,#FF6729 0 4px,transparent 5px),radial-gradient(circle at 84% 6%,#FFF6E5 0 3px,transparent 4px),radial-gradient(circle at 15% 6%,#FFF6E5 0 3px,transparent 4px)}
+    .cup-champ img{width:min(300px,80%);height:auto}
+    .cup-champ .lbl{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+    .cup-champ .who{font-size:26px;font-weight:900;font-style:italic;line-height:1.15}
+    .cup-champ .meta{font-size:14px;font-weight:600}
+    .cup-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
+    .cup-cols h2{margin-top:6px}
+    .cup-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:4px 14px}
+    .cup-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+    .cup-row:first-child{border-top:0}
+    .cup-row .grow{flex:1;min-width:0}
+    .cup-row .nm{font-weight:800}
+    .cup-row .sub{font-size:13px;color:var(--muted)}
+    .cup-medals{font-variant-numeric:tabular-nums;font-weight:800;white-space:nowrap}
+    .cup-medals span{margin-left:8px}
+    .cup-rank{flex:none;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;background:var(--line);color:var(--ink)}
+    .cup-rank.r1{background:#FFC83D;color:#092D4A}
+    .cup-date{flex:none;width:52px;text-align:center;font-weight:900;line-height:1.05;color:var(--ink)}
+    .cup-date small{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+    @media(min-width:800px){.cup-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
     .legacy-grid{display:grid;grid-template-columns:1fr;gap:10px}
     .legacy-card,.core-card{background:var(--ink);color:var(--cream);border:0;border-radius:16px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
     .legacy-card.iron{background:#F2581C;color:#fff}
@@ -190,6 +212,14 @@
     </div>
     <div id="errorState" class="state error"></div>
 
+    <section class="top-section cup-section" id="cupSection" hidden>
+      <div id="cupChampion"></div>
+      <div class="cup-cols">
+        <div><h2>Junk Cup Titles</h2><div id="cupTitles" class="cup-card"></div></div>
+        <div><h2>Hall of Fame</h2><div id="cupHall" class="cup-card"></div></div>
+      </div>
+    </section>
+
     <section class="top-section">
       <h2>Highlights</h2>
       <div id="highlightsGrid" class="top-grid"></div>
@@ -250,6 +280,7 @@
   </main>
 
   <script src="./app/config.js"></script>
+  <script src="./app/tournament.js"></script>
   <script src="./dashboard-v2.js"></script>
 </body>
 </html>
