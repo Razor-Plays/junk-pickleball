@@ -766,3 +766,17 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 
 .chip.late-chip { font-size: 14px; padding: 6px 12px; }
 .chip.late-chip.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+
+/* Rotating partners: rounds as a row of numbers, with what the pick means underneath */
+.round-pick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.round-btn {
+  position: relative; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  font: inherit; font-size: 17px; font-weight: 800; cursor: pointer;
+}
+.round-btn.even::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--good); }
+.round-btn.on { background: var(--select-bg); color: var(--select-ink); border-color: var(--select-bg); }
+.round-btn.on.even::after { background: var(--yellow); }
+.round-sum { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.round-sum-main { font-size: 15px; }
+.round-sum-tag { margin-top: 3px; font-size: 13px; color: var(--accent-ink); }
+.round-sum-tag.even { color: var(--good); }
