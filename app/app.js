@@ -808,6 +808,27 @@
       </div>`;
   }
 
+  // The Junk Cup section on the Club tab: every tournament, newest first, each opening the full
+  // tournament screen. Managers also get "New tournament"; players get it read-only.
+  function junkCupBox(admin) {
+    const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)) || b.id.localeCompare(a.id));
+    if (!admin && !tours.length) return '';
+    const saved = store.get('jpb.open.club-tournaments');
+    const open = saved === null ? false : saved !== '0';
+    const list = tours.length ? `<div class="list">${tours.map((t) => {
+      const pr = PT.progress(t); const pod = PT.podium(t);
+      return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${pod.length ? '🏆 ' : ''}${esc(pod.length ? pod[0] : t.name)}</div>
+            <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? (t.name.trim().toLowerCase() !== 'junk cup' ? esc(t.name) : 'Champion' + (t.format === 'teams' ? 's' : '')) : `${pr.done}/${pr.total} games played`}</div></div>${ICON.chevron}</button>`;
+    }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Turn a session into a Junk Cup: fixed teams of two, or a new partner every game.</p>';
+    return `
+      <details class="club-section" data-glance="club-tournaments" ${open ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true"></span><span class="grow"><span class="club-section-title"><img class="jc-title" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" /></span>
+          <span class="club-section-sum">${tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments'}</span></span></summary>
+        <div class="club-section-body">${list}
+          ${admin ? '<button class="btn secondary block" data-action="new-tournament" style="margin-top:10px">＋ New tournament</button>' : ''}</div>
+      </details>`;
+  }
+
   function renderClub() {
     const d = state.data;
     if (d.role === 'member') {
@@ -815,6 +836,7 @@
       return `
         ${clubHead(d)}
         ${bragCard(d)}
+        ${junkCupBox(false)}
         <h2>Players <span class="pill">${names.length}</span></h2>
         <div class="list">${names.map((p) => `<button class="row" data-action="open-player" data-name="${esc(p.name)}"><div class="grow"><div class="title">${esc(p.name)} ${p.role === 'member' ? '<span class="pill">member</span>' : ''}</div></div>${ICON.chevron}</button>`).join('')}</div>
         <p class="small muted center">Loaded ${esc((state.raw && state.raw.loaded_at || '').replace('T', ' ').slice(0, 16))}<br>
@@ -919,14 +941,7 @@
         <button class="btn ghost" data-action="edit-player" data-name="">＋ Add player</button>
         ${promoteBlock}`, false);
 
-    const tours = [...(state.tournaments || [])].sort((a, b) => tournamentDate(b).localeCompare(tournamentDate(a)));
-    const tournamentBox = section('club-tournaments', '<img class="jc-title" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />', tours.length ? `${tours.length} tournament${tours.length === 1 ? '' : 's'}` : 'tournaments', `
-        ${tours.length ? `<div class="list">${tours.map((t) => {
-    const pr = PT.progress(t); const pod = PT.podium(t);
-    return `<button class="row" data-action="open-tournament" data-id="${esc(t.id)}"><div class="grow"><div class="title">${esc(t.name)}</div>
-            <div class="sub">${esc(PB.dayLabel(tournamentDate(t) || todayISO(), true))} · ${tFormatName(t)} · ${pod.length ? `won by ${esc(pod[0])}` : `${pr.done}/${pr.total} games`}</div></div>${ICON.chevron}</button>`;
-  }).join('')}</div>` : '<p class="small muted" style="margin:0 2px 10px">Turn a session into a Junk Cup: fixed teams of two, or a new partner every game.</p>'}
-        <button class="btn secondary block" data-action="new-tournament" style="margin-top:10px">＋ New tournament</button>`, false);
+    const tournamentBox = junkCupBox(true);
 
     const shareBox = section('club-share', 'Share &amp; Access', 'invite links', `
         <div class="card">
