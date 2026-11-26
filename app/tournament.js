@@ -129,11 +129,11 @@
     return PT.schedule(games, courts, 1, lateTeams).map(blank);
   };
 
-  /** Minutes to allow for one game, changeover included (a club night gets 6 to 8 games a court in 2 hours). */
-  PT.minutesPerGame = (pointsTo = 11) => (pointsTo >= 21 ? 25 : pointsTo >= 15 ? 20 : 15);
+  /** Minutes to allow for one game, changeover included. Measured: rally scoring to 15 took about 12 minutes a game. */
+  PT.minutesPerGame = (pointsTo = 15) => (pointsTo >= 21 ? 16 : pointsTo >= 15 ? 12 : 9);
 
   /** How many times teams should meet to fill a session without running past about 1h40. */
-  PT.teamsDefaultTimes = (nTeams, courts = 2, pointsTo = 11) => {
+  PT.teamsDefaultTimes = (nTeams, courts = 2, pointsTo = 15) => {
     let best = 1;
     for (let k = 1; k <= 3; k += 1) {
       const teams = Array.from({ length: nTeams }, (_, i) => ({ id: `T${i + 1}`, players: [`a${i}`, `b${i}`] }));
@@ -188,7 +188,7 @@
    * The rounds to suggest: the even option if it fits a session (about 1h45
    * at the usual minutes a game), otherwise the most rounds that do fit.
    */
-  PT.americanoBest = (n, courts = 2, pointsTo = 11, limit = 105) => {
+  PT.americanoBest = (n, courts = 2, pointsTo = 15, limit = 105) => {
     const even = PT.americanoDefault(n, courts);
     const per = PT.minutesPerGame(pointsTo);
     if (even && even * per <= limit) return even;
@@ -201,7 +201,7 @@
    * are split into pairs and games so that repeat partners are avoided first,
    * then repeat opponents.
    */
-  PT.buildAmericano = (players, rounds, courts = 2, late = []) => {
+  PT.buildAmericano = (players, rounds, courts = 2, late = [], prior = [], firstSlot = 1) => {
     const n = players.length;
     const isLate = players.map((p) => late.includes(p));
     const playing = Math.min(courts, Math.floor(n / 4)) * 4;
@@ -211,6 +211,15 @@
     const opp = Array.from({ length: n }, () => new Array(n).fill(0));
     const onCourt = Array.from({ length: n }, () => ({}));
     const out = [];
+    // games already played (e.g. before someone left) count towards partners, opponents and games played
+    const ix = new Map(players.map((p, i) => [p, i]));
+    for (const m of prior) {
+      const [a, b] = m.a.map((p) => ix.get(p)), [c, d] = m.b.map((p) => ix.get(p));
+      for (const p of [a, b, c, d]) if (p !== undefined) games[p] += 1;
+      if (a !== undefined && b !== undefined) { partner[a][b] += 1; partner[b][a] += 1; }
+      if (c !== undefined && d !== undefined) { partner[c][d] += 1; partner[d][c] += 1; }
+      for (const [x, y] of [[a, c], [a, d], [b, c], [b, d]]) if (x !== undefined && y !== undefined) { opp[x][y] += 1; opp[y][x] += 1; }
+    }
 
     // every way to split a list of players into games of two pairs
     const splits = (list) => {
@@ -248,7 +257,7 @@
         for (const p of [a, b, c, d]) { games[p] += 1; onCourt[p][court] = (onCourt[p][court] || 0) + 1; }
         partner[a][b] += 1; partner[b][a] += 1; partner[c][d] += 1; partner[d][c] += 1;
         for (const [x, y] of [[a, c], [a, d], [b, c], [b, d]]) { opp[x][y] += 1; opp[y][x] += 1; }
-        out.push({ slot: r, court, a: [players[a], players[b]], b: [players[c], players[d]] });
+        out.push({ slot: r + firstSlot - 1, court, a: [players[a], players[b]], b: [players[c], players[d]] });
       });
     }
     return out.sort((x, y) => x.slot - y.slot || x.court.localeCompare(y.court)).map(blank);
@@ -340,6 +349,30 @@
     return [...order(final), ...(third && PT.isScored(third) ? [order(third)[0]] : [])];
   };
 
+  /**
+   * Take a player out of a tournament that may already be under way.
+   * Games already scored stay as they are, with everyone's points. Games still
+   * to play are rebuilt for the players who are left: rotating partners get the
+   * same number of rounds re-drawn (and the table switches to points per game);
+   * fixed teams lose that player's team from the games still to play.
+   */
+  PT.removePlayer = (t, name) => {
+    const played = (t.matches || []).filter(PT.isScored);
+    const open = (t.matches || []).filter((m) => !PT.isScored(m));
+    const players = (t.players || []).filter((p) => p !== name);
+    const left = [...(t.left || []), { name, after: played.length }];
+    const ids = (ms, start) => ms.map((m, i) => ({ ...m, id: `m${start + i + 1}` }));
+    if (t.format === 'teams') {
+      const team = (t.teams || []).find((x) => x.players.includes(name));
+      const keep = open.filter((m) => !team || (m.ta !== team.id && m.tb !== team.id));
+      return { ...t, players, left, withdrawn: [...(t.withdrawn || []), ...(team ? [team.id] : [])], matches: [...played, ...keep] };
+    }
+    const openSlots = [...new Set(open.filter((m) => m.stage === 'group').map((m) => m.slot))];
+    const firstSlot = played.length ? Math.max(...played.map((m) => m.slot)) + 1 : 1;
+    const rebuilt = openSlots.length ? PT.buildAmericano(players, openSlots.length, t.courts || 2, [], played, firstSlot) : [];
+    return { ...t, players, left, ranking: played.length ? 'average' : t.ranking, matches: [...played, ...ids(rebuilt, played.length)] };
+  };
+
   /** Swap one player for another everywhere (a no-show, a late change). */
   PT.replacePlayer = (t, from, to) => {
     const swap = (list) => list.map((p) => (p === from ? to : p));
@@ -351,8 +384,20 @@
     };
   };
 
+  /** Everything one player (or team, by id) did: each game with partner, opponents, score and points. */
+  PT.playerGames = (t, key) => {
+    const teams = t.format === 'teams';
+    return (t.matches || []).filter((m) => (teams ? m.ta === key || m.tb === key : m.a.includes(key) || m.b.includes(key))).map((m) => {
+      const onA = teams ? m.ta === key : m.a.includes(key);
+      const mine = onA ? m.a : m.b, theirs = onA ? m.b : m.a;
+      const scored = PT.isScored(m);
+      const pf = scored ? (onA ? m.sa : m.sb) : null, pa = scored ? (onA ? m.sb : m.sa) : null;
+      return { slot: m.slot, stage: m.stage, court: m.court, partner: teams ? null : mine.find((p) => p !== key), mine, theirs, scored, pf, pa, won: scored ? pf > pa : null };
+    }).sort((a, b) => a.slot - b.slot);
+  };
+
   /** A rough "how long will this take" for the setup screen. */
-  PT.estimate = (matches, pointsTo = 11) => {
+  PT.estimate = (matches, pointsTo = 15) => {
     const slots = matches.length ? Math.max(...matches.map((m) => m.slot)) : 0;
     const perGame = PT.minutesPerGame(pointsTo);
     const courts = new Set(matches.map((m) => m.court)).size;   // courts actually in use

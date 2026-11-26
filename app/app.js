@@ -1027,26 +1027,30 @@
   /** Sessions tab: the tournament that's on now or coming up (or just finished). */
   function tournamentCard() {
     const today = todayISO();
-    const weekAgo = PB.shiftDays ? PB.shiftDays(today, -7) : new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const list = (state.tournaments || []).map((t) => ({ t, date: tournamentDate(t) })).filter((x) => x.date >= weekAgo);
     if (!list.length) return '';
-    const ahead = list.filter((x) => x.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-    const pick = ahead[0] || list.sort((a, b) => b.date.localeCompare(a.date))[0];
-    const p = PT.progress(pick.t);
-    const podium = PT.podium(pick.t);
-    const line = podium.length ? `Winner: ${podium[0]}` : p.done ? `${p.done} of ${p.total} games played` : `${p.total} games · ${tFormatName(pick.t).toLowerCase()}`;
-    const live = pick.date === today && p.done > 0 && !podium.length;
-    const when = pick.date === today ? 'Today' : PB.dayLabel(pick.date);
-    const custom = pick.t.name.trim().toLowerCase() !== 'junk cup';   // the logo already says Junk Cup
-    return `
-      <button class="t-card" data-action="open-tournament" data-id="${esc(pick.t.id)}">
+    // the day to show: today, else the next one coming up, else the latest one this past week
+    const dates = [...new Set(list.map((x) => x.date))].sort();
+    const day = dates.includes(today) ? today : (dates.find((d) => d > today) || dates[dates.length - 1]);
+    // every tournament that day: the one being played first, finished ones after
+    const cards = list.filter((x) => x.date === day).map((x) => ({ ...x, p: PT.progress(x.t), podium: PT.podium(x.t) }))
+      .sort((a, b) => (a.podium.length ? 1 : 0) - (b.podium.length ? 1 : 0) || a.t.id.localeCompare(b.t.id));
+    return `<div class="t-cards">${cards.map(({ t, date, p, podium }) => {
+      const line = podium.length ? `Winner: ${podium[0]}` : p.done ? `${p.done} of ${p.total} games played` : `${p.total} games · ${tFormatName(t).toLowerCase()}`;
+      const live = date === today && p.done > 0 && !podium.length;
+      const when = date === today ? 'Today' : PB.dayLabel(date);
+      const custom = t.name.trim().toLowerCase() !== 'junk cup';   // the logo already says Junk Cup
+      return `
+      <button class="t-card${podium.length ? ' done' : ''}" data-action="open-tournament" data-id="${esc(t.id)}">
         <img class="t-card-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />
         <span class="grow">
-          <span class="t-card-eyebrow">${esc(when)}${live ? ' <span class="t-live">Live</span>' : ''}</span>
-          ${custom ? `<span class="t-card-name">${esc(pick.t.name)}</span>` : ''}
+          <span class="t-card-eyebrow">${esc(when)}${live ? ' <span class="t-live">Live</span>' : ''}${podium.length ? ' · Finished' : ''}</span>
+          ${custom ? `<span class="t-card-name">${esc(t.name)}</span>` : ''}
           <span class="t-card-sub">${esc(line)}</span></span>
         ${ICON.chevron}
       </button>`;
+    }).join('')}</div>`;
   }
 
   // ---- the tournament itself: next up, table, every game
@@ -1063,7 +1067,7 @@
       <div class="t-hero">
         <img class="t-hero-logo" src="junk-cup.webp" alt="Junk Cup" width="1200" height="363" />
         ${t.name.trim().toLowerCase() !== 'junk cup' ? `<div class="t-word">${tWord(t.name)}</div>` : ''}
-        <div class="t-hero-chips">${date ? `<span>${esc(PB.dayLabel(date))}</span>` : ''}<span>${tFormatName(t)}</span><span>to ${esc(t.points_to || 11)}</span></div>
+        <div class="t-hero-chips">${date ? `<span>${esc(PB.dayLabel(date))}</span>` : ''}<span>${tFormatName(t)}</span><span>First to ${esc(t.points_to || 15)}</span></div>
       </div>
       <div class="t-progress"><div class="bar"><i style="width:${pct}%"></i></div><span class="t-meta">${p.done} of ${p.total} games played</span></div>
       ${podium.length ? `
@@ -1080,7 +1084,7 @@
       <h2>Standings</h2>
       <div class="card t-table-card"><table class="t-table">
         <thead><tr><th></th><th>${teams ? 'Team' : 'Player'}</th>${teams ? '<th>W</th><th>L</th><th>+/−</th>' : avg ? '<th>Avg</th><th>Pts</th><th>GP</th>' : '<th>Pts</th><th>W</th><th>+/−</th>'}</tr></thead>
-        <tbody>${table.map((x) => `<tr${x.rank === 1 && x.played ? ' class="lead"' : ''}><td class="rk">${x.played && x.rank <= 3 ? `<span class="t-medal m${x.rank}">${x.rank}</span>` : x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
+        <tbody>${table.map((x) => `<tr class="t-row${x.rank === 1 && x.played ? ' lead' : ''}" data-action="t-player" data-key="${esc(x.key)}" role="button" tabindex="0"><td class="rk">${x.played && x.rank <= 3 ? `<span class="t-medal m${x.rank}">${x.rank}</span>` : x.rank}</td><td class="nm">${esc(x.name)}</td>${teams
     ? `<td><b>${x.won}</b></td><td>${x.lost}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`
     : avg ? `<td><b>${x.avg.toFixed(1)}</b></td><td>${x.pf}</td><td>${x.played}</td>`
       : `<td><b>${x.pf}</b></td><td>${x.won}</td><td>${x.diff > 0 ? '+' : ''}${x.diff}</td>`}</tr>`).join('')}</tbody>
@@ -1096,6 +1100,7 @@
         <summary>Manage tournament</summary>
         <div class="btn-row">
           <button class="btn ghost" data-action="t-replace">Replace a player</button>
+          <button class="btn ghost" data-action="t-remove">Remove a player</button>
           <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
         </div>
       </details>`;
@@ -1179,7 +1184,7 @@
 
     // details strip
     const date = tournamentDate(t);
-    const bits = [date ? PB.dayLabel(date, true) : '', tFormatName(t), `Games to ${t.points_to || 11}`, `${(t.players || []).length} players`].filter(Boolean);
+    const bits = [date ? PB.dayLabel(date, true) : '', tFormatName(t), `First to ${t.points_to || 15}`, `${(t.players || []).length} players`].filter(Boolean);
     c.fillStyle = NAVY; round(110, H - 232, W - 220, 80, 40); c.fill();
     c.fillStyle = CREAM; fit(bits.join('  ·  '), W - 300, 34, 700, false); c.fillText(bits.join('  ·  '), W / 2, H - 180);
     // club line
@@ -1248,6 +1253,38 @@
     const det = sum.parentElement;
     setTimeout(() => { state.tFold[`${state.tview}:${det.dataset.slot}`] = det.open; }, 0);
   });
+
+  // Tap a name in the standings: that player's (or team's) night, game by game.
+  function tournamentPlayerCard(t, key) {
+    const teams = t.format === 'teams';
+    const row = PT.standings(t).find((x) => x.key === key);
+    if (!row) return;
+    const games = PT.playerGames(t, key);
+    const old = $('#tPlayerCard'); if (old) old.remove();
+    const box = document.createElement('div');
+    box.id = 'tPlayerCard';
+    box.className = 'prompt-back';
+    const stage = { final: 'Final', third: '3rd place' };
+    box.innerHTML = `
+      <div class="prompt-card t-pcard" role="dialog" aria-label="${esc(row.name)}">
+        <div class="t-pcard-head"><span class="t-medal m${row.rank <= 3 && row.played ? row.rank : 0}">${row.rank}</span><b>${esc(row.name)}</b>
+          <button class="icon-btn" data-close aria-label="Close">✕</button></div>
+        <div class="t-pcard-stats">
+          <div><b>${row.pf}</b><span>points</span></div>
+          <div><b>${row.won}–${row.lost}</b><span>won–lost</span></div>
+          <div><b>${row.diff > 0 ? '+' : ''}${row.diff}</b><span>+/−</span></div>
+          ${teams ? '' : `<div><b>${row.played ? (row.pf / row.played).toFixed(1) : '–'}</b><span>per game</span></div>`}
+        </div>
+        <div class="t-pcard-games">${games.map((g) => `
+          <div class="t-pgame${g.scored ? (g.won ? ' won' : ' lost') : ''}">
+            <span class="t-pgame-rd">${stage[g.stage] || `R${g.slot}`}</span>
+            <span class="grow">${teams ? '' : `with <b>${esc(g.partner || '')}</b><br>`}<span class="muted">v ${g.theirs.map(esc).join(' & ')}</span></span>
+            <span class="t-pgame-score">${g.scored ? `${g.pf}–${g.pa}<small>${g.won ? 'W' : 'L'}</small>` : '<small>to play</small>'}</span>
+          </div>`).join('') || '<div class="muted">No games yet.</div>'}</div>
+      </div>`;
+    box.addEventListener('click', (ev) => { if (ev.target === box || ev.target.closest('[data-close]')) box.remove(); });
+    document.body.appendChild(box);
+  }
 
   function renderTournament(partial = false) {
     const el = $('#sheet');
@@ -1356,6 +1393,8 @@
     const sa = Number(a), sb = Number(b);
     if (!Number.isInteger(sa) || !Number.isInteger(sb) || sa < 0 || sb < 0) { toast('Scores are whole numbers', true); return; }
     if (sa === sb) { toast('A game needs a winner: the scores can\'t be equal', true); return; }
+    const target = t.points_to || 15;
+    if (Math.max(sa, sb) !== target && !window.confirm(`First to ${target}: the winner usually has exactly ${target}. Save ${sa}–${sb} anyway?`)) return;
     if (m.sa === sa && m.sb === sb) return;
     commitScore(t.id, m.id, sa, sb);
   });
@@ -1381,7 +1420,7 @@
     const s = sorted.find((x) => x.id === sessionId && x.date >= today) || sorted.find((x) => x.date >= today);
     if (!s) { toast('Book the next session first: a tournament needs a session today or coming up.', true); return; }
     state.draft = null; state.tview = null;
-    state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Junk Cup', format: 'teams', points_to: 11, courts: 0, players: [], rounds: 0, pick: null };
+    state.tdraft = { id: `t${Date.now().toString(36)}`, session_id: s.id, name: 'Junk Cup', format: 'teams', points_to: 15, courts: 0, players: [], rounds: 0, pick: null };
     tAdoptSession();
     $('#sheet').classList.remove('stats-sheet');
     renderTournamentSetup();
@@ -1399,7 +1438,7 @@
     const there = [...new Set(rows.filter((a) => a.pays !== PB.RECLUB).map((a) => a.name))];
     dr.reclub = rows.length - rows.filter((a) => a.pays !== PB.RECLUB).length;
     dr.fromAttendance = there.length;
-    if (there.length && (force || !dr.players.length)) dr.players = there;
+    if (there.length && (force || !dr.players.length)) dr.players = PT.shuffle(there);
   }
   function tDraftBuild(dr) {
     const n = dr.players.length;
@@ -1415,7 +1454,9 @@
     const options = PT.americanoAllRounds(n, dr.courts);
     if (!options.some((o) => o.rounds === dr.rounds)) dr.rounds = PT.americanoBest(n, dr.courts, dr.points_to);
     const load = PT.americanoLoad(n, dr.rounds, dr.courts);
-    return { teams: [], matches: PT.buildAmericano(dr.players, dr.rounds, dr.courts, dr.late || []), options, even: load.even };
+    // a fresh draw each time (Reshuffle changes it), so the opening partners aren't the roster order
+    dr.seed = dr.seed || Date.now();
+    return { teams: [], matches: PT.buildAmericano(PT.shuffle(dr.players, dr.seed), dr.rounds, dr.courts, dr.late || []), options, even: load.even };
   }
   function renderTournamentSetup() {
     const el = $('#sheet');
@@ -1450,7 +1491,7 @@
     : 'Americano: a new partner every game. Each player collects their own points; most points wins.'}</p>
 
         <div class="t-opts">
-          <div><div class="chip-label">Games to</div><div class="seg small">${[11, 15, 21].map((v) => seg('t-points', v, v, dr.points_to === v)).join('')}</div></div>
+          <div><div class="chip-label">First to</div><div class="seg small">${[11, 15, 21].map((v) => seg('t-points', v, v, dr.points_to === v)).join('')}</div></div>
           <div><div class="chip-label">Courts</div><div class="seg small">${[1, 2, 3].map((v) => seg('t-courts', v, v, dr.courts === v)).join('')}</div></div>
         </div>
 
@@ -1487,7 +1528,11 @@
           <div class="round-sum-tag ${o.even ? 'even' : ''}">${o.even ? '● Everyone plays the same number of games' : '○ Some play one game fewer, so the table ranks by points per game'}</div>
         </div>`;
   })()}
-        <p class="small muted" style="margin:6px 2px 0">● = everyone plays the same. Each round is one game per court.</p>` : ''}
+        <p class="small muted" style="margin:6px 2px 0">● = everyone plays the same. Each round is one game per court.</p>
+        <div class="t-draw">
+          <span class="grow"><span class="chip-label" style="margin:0">Random draw · Round 1 preview</span><br>${built.matches.filter((m) => m.slot === 1).map((m) => `<b>${esc(m.court)}</b> ${m.a.map(esc).join(' & ')} v ${m.b.map(esc).join(' & ')}`).join('<br>')}</span>
+          <button class="btn secondary compact" data-action="t-reshuffle">🔀 Reshuffle</button>
+        </div>` : ''}
 
         ${est ? `<div class="t-est"><b>${est.games} games</b> in ${est.slots} round${est.slots === 1 ? '' : 's'} on ${est.courts} court${est.courts === 1 ? '' : 's'}
           <span class="muted">· about ${est.minutes >= 60 ? `${Math.floor(est.minutes / 60)}h${est.minutes % 60 ? ` ${est.minutes % 60}m` : ''}` : `${est.minutes}m`}${dr.format === 'teams' ? `, plus ${est.perGame}m for the final` : ''}</span>
@@ -1526,7 +1571,13 @@
         return true;
       }
       case 't-use-attendance': tAdoptSession(true); dr.pick = null; renderTournamentSetup(); return true;
+      case 't-player': {
+        const cur = state.tournaments.find((x) => x.id === state.tview);
+        if (cur) tournamentPlayerCard(cur, t.dataset.key);
+        return true;
+      }
       case 't-rounds': dr.rounds = Number(t.dataset.v); renderTournamentSetup(); return true;
+      case 't-reshuffle': dr.seed = Date.now() + Math.floor(Math.random() * 1e6); renderTournamentSetup(); return true;
       case 't-late': {
         const n = t.dataset.name;
         dr.late = (dr.late || []).includes(n) ? dr.late.filter((x) => x !== n) : (dr.late || []).concat(n);
@@ -1566,7 +1617,7 @@
       case 't-create': {
         const built = tDraftBuild(dr);
         if (built.error) return true;
-        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.players, late: dr.late || [], teams: built.teams, matches: built.matches, ...(dr.format === 'americano' && !built.even ? { ranking: 'average' } : {}), ...(built.times ? { times: built.times } : {}) };
+        const data = { format: dr.format, points_to: dr.points_to, courts: dr.courts, players: dr.format === 'americano' ? PT.shuffle(dr.players, dr.seed) : dr.players, late: dr.late || [], teams: built.teams, matches: built.matches, ...(dr.format === 'americano' && !built.even ? { ranking: 'average' } : {}), ...(built.times ? { times: built.times } : {}) };
         try {
           await api('saveTournament', { id: dr.id, session_id: dr.session_id, name: dr.name.trim() || 'Junk Cup', data });
           toast('Tournament created');
@@ -1579,7 +1630,7 @@
         if (cur) { t.disabled = true; try { await shareTournament(cur); } finally { t.disabled = false; } }
         return true;
       }
-      case 't-finals': case 't-delete': case 't-replace': {
+      case 't-finals': case 't-delete': case 't-replace': case 't-remove': {
         const cur = state.tournaments.find((x) => x.id === state.tview);
         if (!cur) return true;
         const put = async (next, okMsg) => {
@@ -1589,6 +1640,20 @@
         if (a === 't-finals') {
           const finals = PT.finals(cur);
           if (finals.length) await put({ ...cur, matches: [...cur.matches, ...finals] }, 'Final created');
+        } else if (a === 't-remove') {
+          const who = window.prompt(`Who is leaving?\n\n${cur.players.join(', ')}`);
+          if (!who) return true;
+          const out = cur.players.find((p) => p.toLowerCase() === who.trim().toLowerCase());
+          if (!out) { toast(`${who.trim()} isn't in this tournament`, true); return true; }
+          const next = PT.removePlayer(cur, out);
+          if (cur.format !== 'teams' && next.players.length < 4) { toast('That would leave fewer than 4 players', true); return true; }
+          const played = cur.matches.filter(PT.isScored).length;
+          const msg = cur.format === 'teams'
+            ? `Take ${out}'s team out? Games they've played stay; their games still to play are dropped.`
+            : played ? `Take ${out} out? Scores so far stay, and the games still to play are re-drawn for the ${next.players.length} left. The table will rank by points per game.`
+              : `Take ${out} out? The games are re-drawn for the ${next.players.length} left.`;
+          if (!window.confirm(msg)) return true;
+          await put(next, `${out} is out; the rest of the games are re-drawn`);
         } else if (a === 't-delete') {
           if (!window.confirm(`Delete "${cur.name}" and all its scores?`)) return true;
           try { await api('deleteTournament', { id: cur.id }); toast('Tournament deleted'); state.tview = null; closeSheet(); } catch (e) { tournamentError(e, 'Couldn\'t delete it.'); }

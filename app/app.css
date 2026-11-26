@@ -783,3 +783,30 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .round-sum-sub { margin-top: 2px; font-size: 13px; color: var(--muted); }
 .t-sitting { margin: -2px 2px 4px; padding: 6px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 14px; }
 .t-sitting-label { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+
+/* Sessions: one card per tournament that day */
+.t-cards { display: grid; gap: 10px; margin: 4px 0 16px; }
+.t-cards .t-card { margin: 0; }
+.t-card.done { opacity: .92; }
+/* setup: who's on court in Round 1, with a reshuffle */
+.t-draw { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+/* standings rows open the player's games */
+.t-table tr.t-row { cursor: pointer; }
+.t-table tr.t-row:active td { background: var(--blue-soft); }
+.t-table td.nm::after { content: ' ›'; color: var(--muted); font-weight: 400; }
+.t-pcard { text-align: left; max-height: 86vh; overflow-y: auto; padding: 16px; }
+.t-pcard-head { display: flex; align-items: center; gap: 10px; font-size: 20px; }
+.t-pcard-head b { flex: 1; }
+.t-medal.m0 { background: var(--line); }
+.t-pcard-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; margin: 12px 0; }
+.t-pcard-stats div { background: var(--blue-soft); border-radius: 12px; padding: 8px 6px; text-align: center; }
+.t-pcard-stats b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+.t-pcard-stats span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.t-pgame { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.t-pgame-rd { flex: none; width: 34px; height: 26px; border-radius: 8px; background: var(--line); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+.t-pgame-score { flex: none; text-align: right; font-weight: 900; font-size: 17px; font-variant-numeric: tabular-nums; }
+.t-pgame-score small { display: block; font-size: 11px; font-weight: 800; color: var(--muted); }
+.t-pgame.won .t-pgame-score small { color: var(--good); }
+.t-pgame.lost .t-pgame-score small { color: var(--accent-ink); }
+.t-pgame .grow { flex: 1; min-width: 0; line-height: 1.35; }
+.t-pgame-score { min-width: 64px; }

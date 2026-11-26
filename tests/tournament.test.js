@@ -105,9 +105,9 @@ test('fixed teams can meet more than once, and the default fills a session', () 
   const meets = new Map();
   for (const m of twice) { const k = [m.ta, m.tb].sort().join('v'); meets.set(k, (meets.get(k) || 0) + 1); }
   assert.deepEqual([...meets.values()], [2, 2, 2]);
-  // 15 minutes a game to 11: 3 or 4 teams play twice, 5 or 6 teams once
-  assert.deepEqual([3, 4, 5, 6].map((n) => PT.teamsDefaultTimes(n, 2, 11)), [2, 2, 1, 1]);
-  assert.deepEqual(PT.estimate(twice, 11), { games: 6, slots: 6, minutes: 90, perGame: 15, courts: 1 });
+  // 12 minutes a game to 15: 3 or 4 teams play twice, 5 or 6 teams once
+  assert.deepEqual([3, 4, 5, 6].map((n) => PT.teamsDefaultTimes(n, 2, 15)), [2, 2, 1, 1]);
+  assert.deepEqual(PT.estimate(twice, 15), { games: 6, slots: 6, minutes: 72, perGame: 12, courts: 1 });
 });
 
 test('rotating partners: shorter or longer nights, ranked by points per game', () => {
@@ -139,9 +139,9 @@ test('rotating partners: shorter or longer nights, ranked by points per game', (
 
 test('suggested rounds fit a session', () => {
   assert.equal(PT.americanoBest(8), 7);     // even, 1h45
-  assert.equal(PT.americanoBest(9), 7);     // even would be 9 rounds (2h15), so 7
+  assert.equal(PT.americanoBest(9), 8);     // even would be 9 rounds (1h48 at 12 min), so 8
   assert.equal(PT.americanoBest(10), 5);    // even and fits
-  assert.equal(PT.americanoBest(9, 2, 15), 5);
+  assert.equal(PT.americanoBest(9, 2, 21), 6);
 });
 
 test('late arrivals sit out round 1 and still play their share', () => {
@@ -163,4 +163,30 @@ test('late arrivals sit out round 1 and still play their share', () => {
   noClash(t);
   assert.equal(t.filter((x) => x.slot === 1).some((x) => x.ta === 'T1' || x.tb === 'T1'), false);
   assert.equal(t.length, 6);
+});
+
+test('removing a player mid-tournament keeps scores and re-draws the rest', () => {
+  const players = names(10);
+  let t = { format: 'americano', courts: 2, players, matches: PT.buildAmericano(players, 5, 2) };
+  t.matches = t.matches.map((m) => (m.slot === 1 ? { ...m, sa: 15, sb: 10 } : m));
+  const leaving = t.matches.find((m) => m.slot === 1).a[0];
+  const r = PT.removePlayer(t, leaving);
+  assert.equal(r.players.includes(leaving), false);
+  assert.equal(r.ranking, 'average');
+  const scored = r.matches.filter(PT.isScored);
+  assert.equal(scored.length, 2);                                   // round 1 kept
+  assert.ok(scored.some((m) => [...m.a, ...m.b].includes(leaving)));
+  const rest = r.matches.filter((m) => !PT.isScored(m));
+  assert.equal(rest.some((m) => [...m.a, ...m.b].includes(leaving)), false);
+  assert.equal(new Set(rest.map((m) => m.slot)).size, 4);           // the 4 rounds left, re-drawn
+  assert.ok(Math.min(...rest.map((m) => m.slot)) >= 2);
+  noClash(r.matches);
+  assert.equal(new Set(r.matches.map((m) => m.id)).size, r.matches.length);
+  // before anything's played: just re-drawn, still ranked by total points
+  const fresh = PT.removePlayer({ format: 'americano', courts: 2, players, matches: PT.buildAmericano(players, 5, 2) }, 'P1');
+  assert.equal(fresh.ranking, undefined);
+  // a player's games
+  const g = PT.playerGames(r, leaving);
+  assert.equal(g.length, 1);
+  assert.deepEqual([g[0].pf, g[0].pa, g[0].won], [15, 10, true]);
 });
