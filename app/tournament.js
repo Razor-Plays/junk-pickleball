@@ -74,7 +74,8 @@
    * when it fits. Courts are shared out so no side lives on one court.
    * `games` = [{ sides: [keyA, keyB], ... }] where a key (or array of keys) names who is playing.
    */
-  PT.schedule = (games, courts, firstSlot = 1) => {
+  PT.schedule = (games, courts, firstSlot = 1, late = []) => {
+    const lateSet = new Set(late);
     const queue = [...games];
     const onCourt = new Map();   // who -> { A: n, B: n }
     const who = (g) => g.sides.flat();
@@ -85,6 +86,8 @@
       const now = [];
       for (let i = 0; i < queue.length && now.length < courts; i += 1) {
         if (who(queue[i]).some((p) => busy.has(p))) continue;
+        // nobody arriving late plays in the first round, if there's another game to put on
+        if (slot === firstSlot && lateSet.size && who(queue[i]).some((p) => lateSet.has(p)) && queue.some((g) => !who(g).some((p) => lateSet.has(p)))) continue;
         who(queue[i]).forEach((p) => busy.add(p));
         now.push(queue.splice(i, 1)[0]);
         i -= 1;
@@ -113,7 +116,8 @@
    * Fixed teams: a round robin on the courts. `times` = how often each pair of
    * teams meets (1 to 3); sides swap on the repeat.
    */
-  PT.buildTeams = (teams, courts = 2, times = 1) => {
+  PT.buildTeams = (teams, courts = 2, times = 1, late = []) => {
+    const lateTeams = teams.filter((t) => t.players.some((p) => late.includes(p))).map((t) => t.id);
     const once = PT.roundRobin(teams.length).flat();
     const games = [];
     for (let k = 0; k < Math.max(1, times); k += 1) {
@@ -122,7 +126,7 @@
         games.push({ sides: [teams[i].id, teams[j].id], a: teams[i].players, b: teams[j].players, ta: teams[i].id, tb: teams[j].id });
       }
     }
-    return PT.schedule(games, courts).map(blank);
+    return PT.schedule(games, courts, 1, lateTeams).map(blank);
   };
 
   /** Minutes to allow for one game, changeover included (a club night gets 6 to 8 games a court in 2 hours). */
@@ -196,8 +200,9 @@
    * are split into pairs and games so that repeat partners are avoided first,
    * then repeat opponents.
    */
-  PT.buildAmericano = (players, rounds, courts = 2) => {
+  PT.buildAmericano = (players, rounds, courts = 2, late = []) => {
     const n = players.length;
+    const isLate = players.map((p) => late.includes(p));
     const playing = Math.min(courts, Math.floor(n / 4)) * 4;
     if (!playing) return [];
     const games = new Array(n).fill(0);
@@ -228,7 +233,9 @@
       + opp[a][c] ** 2 + opp[a][d] ** 2 + opp[b][c] ** 2 + opp[b][d] ** 2, 0);
 
     for (let r = 1; r <= rounds; r += 1) {
-      const order = players.map((_, i) => i).sort((x, y) => games[x] - games[y] || ((x + r * 3) % n) - ((y + r * 3) % n));
+      // late arrivals sit out round 1 (as far as the numbers allow), then catch up by having played fewest
+      const away = (i) => (r === 1 && isLate[i] ? 1 : 0);
+      const order = players.map((_, i) => i).sort((x, y) => away(x) - away(y) || games[x] - games[y] || ((x + r * 3) % n) - ((y + r * 3) % n));
       const inPlay = order.slice(0, playing).sort((x, y) => x - y);
       const best = splits(inPlay).reduce((a, b) => (cost(b) < cost(a) ? b : a));
       // courts: spread people across them

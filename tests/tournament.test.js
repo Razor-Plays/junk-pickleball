@@ -143,3 +143,24 @@ test('suggested rounds fit a session', () => {
   assert.equal(PT.americanoBest(10), 5);    // even and fits
   assert.equal(PT.americanoBest(9, 2, 15), 5);
 });
+
+test('late arrivals sit out round 1 and still play their share', () => {
+  const players = names(10);
+  const m = PT.buildAmericano(players, 5, 2, ['P10']);
+  noClash(m);
+  const round1 = new Set(m.filter((x) => x.slot === 1).flatMap((x) => [...x.a, ...x.b]));
+  assert.equal(round1.has('P10'), false);
+  const games = new Map();
+  for (const x of m) for (const p of [...x.a, ...x.b]) games.set(p, (games.get(p) || 0) + 1);
+  assert.deepEqual([...new Set(players.map((p) => games.get(p)))], [4]);   // still 4 each
+  // two late with 10 players: both sit round 1
+  const two = PT.buildAmericano(players, 5, 2, ['P1', 'P2']);
+  const r1 = new Set(two.filter((x) => x.slot === 1).flatMap((x) => [...x.a, ...x.b]));
+  assert.deepEqual([r1.has('P1'), r1.has('P2')], [false, false]);
+  // fixed teams: a late player's team doesn't play in round 1
+  const teams = PT.pairUp(names(8));
+  const t = PT.buildTeams(teams, 2, 1, ['P1']);
+  noClash(t);
+  assert.equal(t.filter((x) => x.slot === 1).some((x) => x.ta === 'T1' || x.tb === 'T1'), false);
+  assert.equal(t.length, 6);
+});
