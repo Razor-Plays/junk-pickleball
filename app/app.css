@@ -780,3 +780,4 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 .round-sum-main { font-size: 15px; }
 .round-sum-tag { margin-top: 3px; font-size: 13px; color: var(--accent-ink); }
 .round-sum-tag.even { color: var(--good); }
+.round-sum-sub { margin-top: 2px; font-size: 13px; color: var(--muted); }

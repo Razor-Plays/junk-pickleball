@@ -1476,7 +1476,8 @@
     const mins = o.games ? Math.ceil(o.games / Math.min(dr.courts, Math.floor(dr.players.length / 4))) * PT.minutesPerGame(dr.points_to) : 0;
     const time = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}` : `${mins}m`;
     return `<div class="round-sum">
-          <div class="round-sum-main"><b>${o.games} games</b> · ${o.even ? `${o.each} each` : `${o.min}–${o.max} each`}${o.maxSits ? ` · sit out ${o.sits === o.maxSits ? o.sits : `${o.sits}–${o.maxSits}`}` : ''} · about ${time}</div>
+          <div class="round-sum-main"><b>Everyone plays ${o.even ? o.each : `${o.min}–${o.max}`} game${o.max === 1 ? '' : 's'}</b>${o.maxSits ? ` and sits out ${o.sits === o.maxSits ? (o.sits === 1 ? '1 round' : `${o.sits} rounds`) : `${o.sits}–${o.maxSits} rounds`}` : ''}</div>
+          <div class="round-sum-sub">${dr.rounds} rounds · ${o.games} games in total · about ${time}</div>
           <div class="round-sum-tag ${o.even ? 'even' : ''}">${o.even ? '● Everyone plays the same number of games' : '○ Some play one game fewer, so the table ranks by points per game'}</div>
         </div>`;
   })()}
