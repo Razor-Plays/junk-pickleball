@@ -197,6 +197,7 @@
       return;
     }
     toast(e.message || String(e), true);
+    splashReady();   // a failed first load shouldn't leave the opening screen up
   }
 
   async function save(action, payload, okMsg) {
@@ -255,6 +256,7 @@
     if (!signedIn) {
       $('#tabbar').hidden = true;
       view.innerHTML = renderSetup();
+      splashReady();
       return;
     }
     $('#tabbar').hidden = false;
@@ -265,7 +267,11 @@
     if (state.tab === 'bills') view.innerHTML = renderBills();
     else if (state.tab === 'club') view.innerHTML = renderClub();
     else view.innerHTML = renderSessions();
+    splashReady();
   }
+
+  // The opening animation (in index.html) waits for the first real screen.
+  function splashReady() { if (window.jpbSplash) window.jpbSplash.ready(); }
 
   function renderSetup() {
     return `
