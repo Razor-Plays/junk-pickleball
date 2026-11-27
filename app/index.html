@@ -16,8 +16,138 @@
     try { if (localStorage.getItem('jpb.theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
   </script>
   <link rel="stylesheet" href="app.css" />
+  <style>
+    /* Opening screen: a ball smashes into the logo, then the logo slides up into
+       the banner once the app is ready. Kept here so it paints before anything else. */
+    .splash { position: fixed; inset: 0; z-index: 100; background: #FFF6E5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; overflow: hidden; }
+    .splash-logo { position: relative; width: min(78vw, 360px); aspect-ratio: 1215 / 1043; }
+    .splash-full { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transform-origin: 81% 23%; }
+    .splash-fly, .splash-ring, .splash-dust { position: absolute; left: 81.1%; top: 23.4%; }
+    .splash-fly { width: 20.8%; aspect-ratio: 1; translate: -50% -50%; opacity: 0; z-index: 3; }
+    .splash-ring { width: 20%; aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; border: 3px solid #FF6729; opacity: 0; }
+    .splash-dust { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; opacity: 0; }
+    .splash-wait { height: 92px; display: grid; justify-items: center; align-content: start; gap: 10px; opacity: 0; }
+    .splash-court { position: relative; width: 150px; height: 56px; }
+    .splash-court::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 2px; height: 22px; background: #EBDFC9; }
+    .splash-hx { position: absolute; left: 0; bottom: 0; width: 28px; height: 56px; animation: splash-x 1.3s linear infinite alternate; }
+    .splash-hy { position: absolute; left: 0; bottom: 6px; width: 28px; height: 28px; animation: splash-y .65s cubic-bezier(.33,0,.66,0) infinite alternate-reverse; }
+    .splash-hy img { width: 100%; height: 100%; display: block; animation: splash-spin 1.3s linear infinite; }
+    .splash-shadow { position: absolute; left: 4px; bottom: 0; width: 20px; height: 5px; border-radius: 50%; background: rgba(9, 45, 74, .16); animation: splash-s .65s cubic-bezier(.33,0,.66,0) infinite alternate-reverse; }
+    .splash-line { margin: 0; font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #5A6E80; transition: opacity .25s; }
+    @keyframes splash-x { to { transform: translateX(122px); } }
+    @keyframes splash-y { from { transform: translateY(-30px); } }
+    @keyframes splash-s { from { transform: scaleX(.55); opacity: .5; } }
+    @keyframes splash-spin { to { transform: rotate(360deg); } }
+    body.splash-reveal #view { animation: splash-rise .4s .1s cubic-bezier(.2, .7, .3, 1) both; }
+    @keyframes splash-rise { from { opacity: 0; transform: translateY(16px); } }
+  </style>
 </head>
 <body>
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-logo">
+      <img class="splash-full" src="logo.svg" alt="" />
+      <span class="splash-ring"></span>
+      <img class="splash-fly" src="ball.svg" alt="" />
+    </div>
+    <div class="splash-wait">
+      <div class="splash-court"><div class="splash-hx"><span class="splash-shadow"></span><div class="splash-hy"><img src="ball.svg" alt="" /></div></div></div>
+      <p class="splash-line">Warming up…</p>
+    </div>
+  </div>
+  <script>
+    // Plays once when the app opens. app.js calls jpbSplash.ready() once the
+    // first screen is drawn; the logo then slides up into the banner. If the
+    // sheet is slow, a ball rallies under the logo until then.
+    (function () {
+      var el = document.getElementById('splash');
+      var $ = function (s) { return el.querySelector(s); };
+      var logo = $('.splash-logo'), full = $('.splash-full'), fly = $('.splash-fly'), ring = $('.splash-ring'), wait = $('.splash-wait'), line = $('.splash-line');
+      var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var canAnimate = !!el.animate && !reduce;
+      var LINES = ['Warming up…', 'Counting who bailed…', 'Blaming the paddle…', 'Checking the kitty…', 'Finding a fourth…', 'Arguing about the kitchen line…'];
+      var introDone = false, appReady = false, gone = false, timers = [];
+      var later = function (ms, fn) { timers.push(setTimeout(fn, ms)); };
+      var fx = function (n, frames, opts) { opts.fill = opts.fill || 'forwards'; return n.animate(frames, opts); };
+      var dust = ['#FF6729', '#FFC83D', '#13A5C5', '#092D4A', '#FF6729', '#FFC83D', '#13A5C5', '#FF6729'].map(function (c) {
+        var d = document.createElement('span'); d.className = 'splash-dust'; d.style.background = c; logo.appendChild(d); return d;
+      });
+
+      function smash() {
+        fx(fly, [
+          { opacity: 1, transform: 'translate(-420%, 520%) scale(2.6) rotate(-540deg)' },
+          { opacity: 1, transform: 'translate(-170%, -110%) scale(1.7) rotate(-200deg)', offset: .55 },
+          { opacity: 1, transform: 'translate(0, 0) scale(1) rotate(0deg)' }
+        ], { duration: 480, easing: 'cubic-bezier(.35, .05, .55, 1)' });
+        later(480, function () {
+          fx(fly, [{ transform: 'scale(1.3, .72)', opacity: 1 }, { transform: 'scale(.95, 1.05)', opacity: 1, offset: .5 }, { transform: 'scale(1)', opacity: 0 }], { duration: 260, easing: 'ease-out' });
+          fx(full, [
+            { opacity: 0, transform: 'scale(.5)' },
+            { opacity: 1, transform: 'scale(1.13, 1.06)', offset: .35 },
+            { opacity: 1, transform: 'scale(.95, .99)', offset: .6 },
+            { opacity: 1, transform: 'scale(1.02)', offset: .8 },
+            { opacity: 1, transform: 'scale(1)' }
+          ], { duration: 600, easing: 'ease-out' });
+          fx(logo, [{ transform: 'none' }, { transform: 'translate(-5px, 3px)' }, { transform: 'translate(4px, -3px)' }, { transform: 'translate(-2px, 1px)' }, { transform: 'none' }], { duration: 260, fill: 'none' });
+          fx(ring, [{ opacity: .8, transform: 'scale(.6)' }, { opacity: 0, transform: 'scale(3.2)' }], { duration: 480, easing: 'cubic-bezier(.2, .7, .3, 1)' });
+          dust.forEach(function (d, i) {
+            var a = (i / dust.length) * Math.PI * 2 + .3, r = 70 + (i % 3) * 22;
+            fx(d, [{ opacity: 1, transform: 'translate(0, 0) scale(1)' }, { opacity: 0, transform: 'translate(' + Math.cos(a) * r + 'px, ' + Math.sin(a) * r + 'px) scale(.4)' }], { duration: 520, easing: 'cubic-bezier(.15, .7, .3, 1)' });
+          });
+        });
+        later(850, function () { introDone = true; maybeLeave(); });
+        later(1100, rally);
+      }
+
+      function rally() {
+        if (gone) return;
+        fx(wait, [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 300 });
+        var i = 0;
+        (function next() {
+          later(1600, function () {
+            line.style.opacity = 0;
+            later(250, function () { i = (i + 1) % LINES.length; line.textContent = LINES[i]; line.style.opacity = 1; next(); });
+          });
+        })();
+      }
+
+      function done() {
+        el.remove();
+        var hero = document.querySelector('#hero img');
+        if (hero) hero.style.visibility = '';
+        document.body.classList.add('splash-reveal');
+      }
+
+      function leave() {
+        if (gone) return;
+        gone = true;
+        timers.forEach(clearTimeout);
+        var hero = document.querySelector('#hero img');
+        var b = hero && hero.getBoundingClientRect();
+        if (!canAnimate || !b || !b.width || window.scrollY > 0) {
+          if (!el.animate) return done();
+          fx(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 250 }).onfinish = done;
+          return;
+        }
+        // slide the big logo into the banner, then let the app show around it
+        var a = logo.getBoundingClientRect(), s = b.height / a.height;
+        var dx = (b.left + b.width / 2) - (a.left + a.width / 2), dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+        hero.style.visibility = 'hidden';
+        fx(wait, [{ opacity: getComputedStyle(wait).opacity }, { opacity: 0 }], { duration: 160 });
+        fx(logo, [{ transform: 'none' }, { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(' + s + ')' }], { duration: 420, easing: 'cubic-bezier(.5, 0, .2, 1)' }).onfinish = done;
+        fx(el, [{ backgroundColor: 'rgba(255, 246, 229, 1)' }, { backgroundColor: 'rgba(255, 246, 229, 0)' }], { duration: 340, delay: 120, easing: 'ease-out' });
+      }
+
+      function maybeLeave() { if (introDone && appReady) leave(); }
+      window.jpbSplash = { ready: function () { appReady = true; maybeLeave(); } };
+      setTimeout(function () { introDone = appReady = true; maybeLeave(); }, 12000);   // never get stuck here
+      el.addEventListener('click', function () { introDone = true; maybeLeave(); });   // a tap skips the show
+
+      if (!canAnimate) { full.style.opacity = 1; introDone = true; return; }
+      // wait (briefly) for the pictures, so the ball never lands on an empty space
+      var pics = [full, fly].map(function (img) { return img.decode ? img.decode().catch(function () {}) : null; });
+      Promise.race([Promise.all(pics), new Promise(function (r) { setTimeout(r, 900); })]).then(smash);
+    })();
+  </script>
   <!-- Compact bar. Over the big logo banner it is see-through; once the banner
        has scrolled away (or on other tabs) it turns solid and shows the name. -->
   <header class="topbar" id="topbar">
