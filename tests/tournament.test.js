@@ -190,3 +190,27 @@ test('removing a player mid-tournament keeps scores and re-draws the rest', () =
   assert.equal(g.length, 1);
   assert.deepEqual([g[0].pf, g[0].pa, g[0].won], [15, 10, true]);
 });
+
+test('Junk Rating follows the worked examples', () => {
+  const g = (a, b, sa, sb) => ({ id: 'm', slot: 1, court: 'A', stage: 'group', a, b, sa, sb });
+  const starts = { T: 3.5, K: 3.5, A: 3, B: 3 };
+  const run = (m) => Object.fromEntries(PT.ratings([{ id: 't', date: '2026-11-26', matches: [m] }], starts).map((r) => [r.name, r.rating]));
+  // expected about 15-9 for 3.5 v 3.0
+  assert.equal(Math.round(PT.expectedShare(3.5, 3) * 1000) / 1000, 0.625);
+  // first games are provisional (K = 1), so changes are double the ½ examples
+  let r = run(g(['A', 'B'], ['T', 'K'], 9, 15));   // exactly as expected
+  assert.deepEqual([r.A, r.T], [3, 3.5]);
+  r = run(g(['A', 'B'], ['T', 'K'], 11, 15));      // closer than expected: weaker pair up
+  assert.ok(r.A > 3 && r.T < 3.5);
+  r = run(g(['A', 'B'], ['T', 'K'], 15, 13));      // upset: big jump
+  assert.equal(r.A, 3 + 0.161);
+  // guests play at 3.0 and aren't kept
+  const withGuest = PT.ratings([{ id: 't', date: '2026-11-26', matches: [g(['A', 'Zed'], ['T', 'B'], 15, 10)] }], starts);
+  assert.equal(withGuest.some((x) => x.name === 'Zed'), false);
+  // after 10 games a player moves at ½
+  const many = Array.from({ length: 11 }, (_, i) => ({ ...g(['A', 'B'], ['T', 'K'], 15, 13), slot: i + 1 }));
+  const last = PT.ratings([{ id: 't', date: '2026-11-26', matches: many }], starts).find((x) => x.name === 'A');
+  assert.equal(last.games, 11);
+  assert.equal(last.provisional, false);
+  assert.ok(Math.abs(last.history[10].change) < Math.abs(last.history[0].change));
+});

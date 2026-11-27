@@ -813,3 +813,11 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 
 /* All Junk Cups: one fold per month */
 .cup-month .list { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+
+/* Junk Rating (admins) */
+.r-rank { flex: none; width: 24px; text-align: center; font-weight: 800; color: var(--muted); }
+.r-val { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.r-val b { display: block; font-size: 18px; }
+.r-up, .r-down, .r-flat { font-size: 12px; font-weight: 800; }
+.r-up { color: var(--good); } .r-down { color: var(--accent-ink); } .r-flat { color: var(--muted); }
+.fact-side .r-up, .fact-side .r-down, .fact-side .r-flat { font-size: 13px; }

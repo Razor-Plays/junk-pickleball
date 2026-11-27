@@ -20,7 +20,7 @@
  * only while Settings > public_stats is TRUE.
  */
 
-const API_VERSION = 8;
+const API_VERSION = 9;
 
 // Leave empty when this script is bound to the spreadsheet.
 const SHEET_ID = '';
@@ -29,7 +29,7 @@ const MAX_FAILED_ATTEMPTS = 30;   // wrong access codes allowed ...
 const FAILURE_WINDOW_SECONDS = 600; // ... within this rolling window
 
 const TABS = {
-  Players: ['name', 'role', 'active', 'phone', 'notes'],
+  Players: ['name', 'role', 'active', 'phone', 'notes', 'rating_start'],
   Sessions: ['id', 'date', 'reclub_fee', 'notes', 'updated_at', 'location', 'play_hours', 'start_hour'],
   Bookings: ['session_id', 'member', 'hours', 'rate'],
   Attendance: ['session_id', 'name', 'guest', 'pays'],
@@ -282,13 +282,17 @@ const ACTIONS = {
     const taken = readTable_('Players').filter(function (r) { return nameKey_(r.name) === nameKey_(name); });
     const clash = taken.some(function (r) { return r.name !== original; }) || (p.isNew && taken.length > 0);
     if (clash) throw new Error('There is already a player called ' + taken[0].name + '. Add a last initial to tell them apart.');
+    const prior = readTable_('Players').filter(function (r) { return r.name === original; })[0];
     if (original !== name) renameEverywhere_(original, name);
+    // Junk Rating starting point: set by an admin; a save that doesn't mention it keeps what's there
+    const start = p.rating_start === undefined || p.rating_start === '' || p.rating_start === null ? (prior ? prior.rating_start : '') : Number(p.rating_start);
     upsertBy_('Players', 'name', name, {
       name: name,
       role: p.role === 'member' ? 'member' : 'player',
       active: p.active === false ? 'FALSE' : 'TRUE',
       phone: p.phone || '',
       notes: p.notes || '',
+      rating_start: start === '' || isNaN(start) ? '' : start,
     });
   },
 
