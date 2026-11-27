@@ -808,7 +808,7 @@
       </div>`;
   }
 
-  // Junk Rating (admins only for now): starting points from the Players tab, then every scored Junk Cup game.
+  // JUPR (admins only for now): starting points from the Players tab, then every scored Junk Cup game.
   function junkRatings() {
     const d = state.data;
     if (!d || d.role === 'member') return [];
@@ -993,7 +993,7 @@
     const tournamentBox = junkCupBox(true);
     const ratings = junkRatings().filter((r) => active.some((p) => p.name === r.name) || r.games);
     const rated = ratings.filter((r) => r.games).length;
-    const ratingBox = section('club-rating', 'Junk Rating', `admins only · ${rated} rated`, `
+    const ratingBox = section('club-rating', 'JUPR', `Junk Pickleball rating · admins only · ${rated} rated`, `
         <p class="small muted" style="margin:0 2px 8px">From Junk Cup games only. Ratings are provisional for a player's first 10 games. Set someone's starting point in Edit player.</p>
         <div class="list">${ratings.map((r, i) => `
           <button class="row" data-action="open-player" data-name="${esc(r.name)}">
@@ -1177,13 +1177,13 @@
     if (state.data.role === 'member') return '';
     return `
       ${PT.finals(t).length ? '<button class="btn block" data-action="t-finals">Round robin done: create the final</button>' : ''}
-      ${t.rated === false ? '<p class="small muted center" style="margin:14px 0 0">⭐ Not counted in the Junk Rating</p>' : ''}
+      ${t.rated === false ? '<p class="small muted center" style="margin:14px 0 0">⭐ Not counted toward JUPR</p>' : ''}
       <details class="t-manage">
         <summary>Manage tournament</summary>
         <div class="btn-row">
           <button class="btn ghost" data-action="t-replace">Replace a player</button>
           <button class="btn ghost" data-action="t-remove">Remove a player</button>
-          <button class="btn ghost" data-action="t-rated">${t.rated === false ? '⭐ Count toward Junk Rating' : "Don't count toward Junk Rating"}</button>
+          <button class="btn ghost" data-action="t-rated">${t.rated === false ? '⭐ Count toward JUPR' : "Don't count toward JUPR"}</button>
           <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
         </div>
       </details>`;
@@ -1515,7 +1515,7 @@
     const s = d.sessions.find((x) => x.id === dr.session_id);
     const sum = PB.sessionSummary(d, s);
     const courts = sum.hours / (s.play_hours || 2);
-    dr.courts = Number.isInteger(courts) && courts >= 1 && courts <= 3 ? courts : 2;
+    dr.courts = Number.isInteger(courts) && courts >= 1 && courts <= 2 ? courts : 2;
     // The session's attendance is the roster. Reclub guests aren't named, so they're added by hand.
     const rows = d.attendance.filter((a) => a.session_id === s.id);
     const there = [...new Set(rows.filter((a) => a.pays !== PB.RECLUB).map((a) => a.name))];
@@ -1575,7 +1575,7 @@
 
         <div class="t-opts">
           <div><div class="chip-label">First to</div><div class="seg small">${[11, 15, 21].map((v) => seg('t-points', v, v, dr.points_to === v)).join('')}</div></div>
-          <div><div class="chip-label">Courts</div><div class="seg small">${[1, 2, 3].map((v) => seg('t-courts', v, v, dr.courts === v)).join('')}</div></div>
+          <div><div class="chip-label">Courts</div><div class="seg small">${[1, 2].map((v) => seg('t-courts', v, v, dr.courts === v)).join('')}</div></div>
         </div>
 
         <h2>Players <span class="pill">${dr.players.length}</span></h2>
@@ -1726,8 +1726,8 @@
           if (finals.length) await put({ ...cur, matches: [...cur.matches, ...finals] }, 'Final created');
         } else if (a === 't-rated') {
           const off = cur.rated !== false;
-          if (!window.confirm(off ? 'Leave this tournament out of the Junk Rating? Its games stop counting for everyone.' : 'Count this tournament in the Junk Rating again?')) return true;
-          await put({ ...cur, rated: !off }, off ? 'Left out of the Junk Rating' : 'Counts toward the Junk Rating again');
+          if (!window.confirm(off ? 'Leave this tournament out of JUPR? Its games stop counting for everyone.' : 'Count this tournament toward JUPR again?')) return true;
+          await put({ ...cur, rated: !off }, off ? 'Left out of JUPR' : 'Counts toward JUPR again');
         } else if (a === 't-remove') {
           const who = window.prompt(`Who is leaving?\n\n${cur.players.join(', ')}`);
           if (!who) return true;
@@ -1800,7 +1800,7 @@
       ...(() => {
         const r = junkRatings().find((x) => x.name === name);
         if (!r) return [];
-        return [{ icon: '⭐', label: `Junk Rating · admins only${r.provisional ? ' · provisional' : ''}`, value: r.rating.toFixed(2),
+        return [{ icon: '⭐', label: `JUPR · admins only${r.provisional ? ' · provisional' : ''}`, value: r.rating.toFixed(2),
           side: r.games ? `${ratingChange(r.change)} from ${r.start.toFixed(1)} · ${r.games} games` : `starts ${r.start.toFixed(1)}` }];
       })(),
     ].filter(Boolean);
@@ -1868,7 +1868,7 @@
       <label class="field"><span>WhatsApp number with country code (optional — lets "Send" open their chat)</span>
         <input type="tel" name="phone" value="${esc(p.phone)}" placeholder="+852 9123 4567" /></label>
       <label class="field"><span>Notes</span><input type="text" name="notes" value="${esc(p.notes)}" /></label>
-      <label class="field"><span>Junk Rating starting point (admins only)</span>
+      <label class="field"><span>JUPR starting point (admins only)</span>
         <select name="rating_start">${[2, 2.5, 3, 3.5, 4, 4.5, 5].map((v) => `<option value="${v}"${(p.rating_start ?? 3) === v ? ' selected' : ''}>${v.toFixed(1)}</option>`).join('')}</select></label>
       ${name ? '<p class="small muted">Renaming updates every past session too. Changing the starting point re-works their rating from scratch.</p>' : ''}`,
     (fd) => {
