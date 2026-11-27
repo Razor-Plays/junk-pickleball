@@ -1793,16 +1793,16 @@
     // Each fact: an icon, what it is, and the answer in bold.
     const dayName = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
     const facts = [
-      h.totalSessions ? { icon: '🎯', label: 'Turnout since joining', value: `${h.games} of ${h.totalSessions} sessions`, side: `${share}%`, bar: share } : null,
-      h.favouriteDay ? { icon: '🏓', label: 'Usual day', value: dayName[h.favouriteDay] } : null,
-      h.busiestMonth && h.busiestMonth.games > 1 ? { icon: '🔥', label: 'Busiest month', value: PB.monthLabel(h.busiestMonth.month), side: `${h.busiestMonth.games} sessions` } : null,
-      h.favouritePlace ? { icon: '📍', label: 'Most often at', value: esc(h.favouritePlace) } : null,
       ...(() => {
         const r = junkRatings().find((x) => x.name === name);
         if (!r) return [];
         return [{ icon: '⭐', label: `JUPR · admins only${r.provisional ? ' · provisional' : ''}`, value: r.rating.toFixed(2),
           side: r.games ? `${ratingChange(r.change)} from ${r.start.toFixed(1)} · ${r.games} games` : `starts ${r.start.toFixed(1)}` }];
       })(),
+      h.totalSessions ? { icon: '🎯', label: 'Turnout since joining', value: `${h.games} of ${h.totalSessions} sessions`, side: `${share}%`, bar: share } : null,
+      h.favouriteDay ? { icon: '🏓', label: 'Usual day', value: dayName[h.favouriteDay] } : null,
+      h.busiestMonth && h.busiestMonth.games > 1 ? { icon: '🔥', label: 'Busiest month', value: PB.monthLabel(h.busiestMonth.month), side: `${h.busiestMonth.games} sessions` } : null,
+      h.favouritePlace ? { icon: '📍', label: 'Most often at', value: esc(h.favouritePlace) } : null,
     ].filter(Boolean);
     const line = (i) => `<button class="glance-row" data-action="view-session" data-id="${esc(i.session)}" data-from="${esc(name)}"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
       i.kind === 'booking' ? `booked ${i.hours} court-hour${i.hours === 1 ? '' : 's'}` : i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
