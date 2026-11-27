@@ -108,6 +108,7 @@
         active: p.active === undefined || p.active === '' ? true : bool(p.active),
         phone: clean(p.phone),
         notes: clean(p.notes),
+        rating_start: p.rating_start === undefined || p.rating_start === '' ? null : num(p.rating_start),
       })),
       sessions: (r.sessions || []).filter((s) => clean(s.id) && clean(s.date)).map((s) => ({
         id: clean(s.id),

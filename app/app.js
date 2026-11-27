@@ -808,6 +808,15 @@
       </div>`;
   }
 
+  // Junk Rating (admins only for now): starting points from the Players tab, then every scored Junk Cup game.
+  function junkRatings() {
+    const d = state.data;
+    if (!d || d.role === 'member') return [];
+    const starts = Object.fromEntries(d.players.map((p) => [p.name, p.rating_start === null ? PT.RATING.DEFAULT : p.rating_start]));
+    return PT.ratings((state.tournaments || []).map((t) => ({ ...t, date: tournamentDate(t) })), starts);
+  }
+  const ratingChange = (c) => (Math.abs(c) < 0.005 ? '<span class="r-flat">±0</span>' : c > 0 ? `<span class="r-up">▲ ${c.toFixed(2)}</span>` : `<span class="r-down">▼ ${Math.abs(c).toFixed(2)}</span>`);
+
   // One line per cup: the champion once decided, otherwise how far it's got.
   const cupRow = (t, from = '') => {
     const pr = PT.progress(t); const pod = PT.podium(t);
@@ -982,6 +991,17 @@
         ${promoteBlock}`, false);
 
     const tournamentBox = junkCupBox(true);
+    const ratings = junkRatings().filter((r) => active.some((p) => p.name === r.name) || r.games);
+    const rated = ratings.filter((r) => r.games).length;
+    const ratingBox = section('club-rating', 'Junk Rating', `admins only · ${rated} rated`, `
+        <p class="small muted" style="margin:0 2px 8px">From Junk Cup games only. Ratings are provisional for a player's first 10 games. Set someone's starting point in Edit player.</p>
+        <div class="list">${ratings.map((r, i) => `
+          <button class="row" data-action="open-player" data-name="${esc(r.name)}">
+            <span class="r-rank">${i + 1}</span>
+            <div class="grow"><div class="title">${esc(r.name)}${r.provisional ? ' <span class="pill">provisional</span>' : ''}</div>
+              <div class="sub">${r.games ? `${r.games} game${r.games === 1 ? '' : 's'} · won ${r.won} · started ${r.start.toFixed(1)}` : `not played a Junk Cup yet · starts ${r.start.toFixed(1)}`}</div></div>
+            <div class="r-val"><b>${r.rating.toFixed(2)}</b>${r.games ? ratingChange(r.change) : ''}</div>
+          </button>`).join('')}</div>`, false);
 
     const shareBox = section('club-share', 'Share &amp; Access', 'invite links', `
         <div class="card">
@@ -1015,6 +1035,7 @@
       ${bragCard(d)}
       ${playersBox}
       ${tournamentBox}
+      ${ratingBox}
       ${membership}
       ${kittyBox}
       ${shareBox}
@@ -1770,6 +1791,12 @@
       h.favouriteDay ? { icon: '🏓', label: 'Usual day', value: dayName[h.favouriteDay] } : null,
       h.busiestMonth && h.busiestMonth.games > 1 ? { icon: '🔥', label: 'Busiest month', value: PB.monthLabel(h.busiestMonth.month), side: `${h.busiestMonth.games} sessions` } : null,
       h.favouritePlace ? { icon: '📍', label: 'Most often at', value: esc(h.favouritePlace) } : null,
+      ...(() => {
+        const r = junkRatings().find((x) => x.name === name);
+        if (!r) return [];
+        return [{ icon: '⭐', label: `Junk Rating · admins only${r.provisional ? ' · provisional' : ''}`, value: r.rating.toFixed(2),
+          side: r.games ? `${ratingChange(r.change)} from ${r.start.toFixed(1)} · ${r.games} games` : `starts ${r.start.toFixed(1)}` }];
+      })(),
     ].filter(Boolean);
     const line = (i) => `<button class="glance-row" data-action="view-session" data-id="${esc(i.session)}" data-from="${esc(name)}"><span class="name">${esc(PB.dayLabel(i.date))}<span class="note">${
       i.kind === 'booking' ? `booked ${i.hours} court-hour${i.hours === 1 ? '' : 's'}` : i.kind === 'guest' ? `guest ${esc(i.who)}` : i.kind === 'hosted' ? `paid by ${esc(i.paidBy)}` : ''}${i.location ? `${i.kind === 'self' ? '' : ' · '}${esc(i.location)}` : ''}</span></span>
@@ -1835,14 +1862,16 @@
       <label class="field"><span>WhatsApp number with country code (optional — lets "Send" open their chat)</span>
         <input type="tel" name="phone" value="${esc(p.phone)}" placeholder="+852 9123 4567" /></label>
       <label class="field"><span>Notes</span><input type="text" name="notes" value="${esc(p.notes)}" /></label>
-      ${name ? '<p class="small muted">Renaming updates every past session too.</p>' : ''}`,
+      <label class="field"><span>Junk Rating starting point (admins only)</span>
+        <select name="rating_start">${[2, 2.5, 3, 3.5, 4, 4.5, 5].map((v) => `<option value="${v}"${(p.rating_start ?? 3) === v ? ' selected' : ''}>${v.toFixed(1)}</option>`).join('')}</select></label>
+      ${name ? '<p class="small muted">Renaming updates every past session too. Changing the starting point re-works their rating from scratch.</p>' : ''}`,
     (fd) => {
       const newName = fd.name.trim();
       const clash = PB.playerNamed(state.data, newName, name);
       if (clash) { toast(nameTakenMessage(clash.name, newName), true); return false; }
       return save('savePlayer', {
         originalName: name || newName, name: newName, role: fd.role, isNew: !name,
-        active: fd.active === 'true', phone: fd.phone, notes: fd.notes,
+        active: fd.active === 'true', phone: fd.phone, notes: fd.notes, rating_start: Number(fd.rating_start),
       }, 'Player saved');
     });
   }

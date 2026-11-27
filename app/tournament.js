@@ -396,6 +396,55 @@
     }).sort((a, b) => a.slot - b.slot);
   };
 
+  /**
+   * Junk Rating. Every scored Junk Cup game, oldest first:
+   *   team rating = average of the two partners
+   *   expected share of the points = 1 / (1 + 10^(-(us - them) / SCALE))
+   *   each player moves K × (actual share − expected share)
+   * K is ½, or 1 for a player's first 10 games (provisional). Guests (not in
+   * `starts`) play at the default and aren't kept. Fixed-teams games count too.
+   */
+  PT.RATING = { SCALE: 2.25, K: 0.5, K_NEW: 1, NEW_GAMES: 10, DEFAULT: 3 };
+  PT.expectedShare = (us, them) => 1 / (1 + 10 ** (-(us - them) / PT.RATING.SCALE));
+  PT.ratings = (tournaments, starts) => {
+    const R = PT.RATING;
+    const known = new Map(Object.entries(starts || {}).map(([n, v]) => [n, Number.isFinite(v) ? v : R.DEFAULT]));
+    const rows = new Map();
+    const get = (n) => {
+      if (!known.has(n)) return null;
+      if (!rows.has(n)) rows.set(n, { name: n, start: known.get(n), rating: known.get(n), games: 0, won: 0, history: [] });
+      return rows.get(n);
+    };
+    const now = (n) => (get(n) ? get(n).rating : R.DEFAULT);
+    const games = [];
+    for (const t of tournaments || []) {
+      for (const m of t.matches || []) if (PT.isScored(m)) games.push({ t, m });
+    }
+    games.sort((x, y) => String(x.t.date || '').localeCompare(String(y.t.date || '')) || String(x.t.id).localeCompare(String(y.t.id)) || x.m.slot - y.m.slot || String(x.m.court).localeCompare(String(y.m.court)));
+    for (const { t, m } of games) {
+      const ra = (now(m.a[0]) + now(m.a[1])) / 2, rb = (now(m.b[0]) + now(m.b[1])) / 2;
+      const ea = PT.expectedShare(ra, rb);
+      const share = m.sa / (m.sa + m.sb);
+      const moves = [];
+      for (const [side, exp, act, won] of [[m.a, ea, share, m.sa > m.sb], [m.b, 1 - ea, 1 - share, m.sb > m.sa]]) {
+        for (const p of side) {
+          const row = get(p);
+          if (!row) continue;
+          const k = row.games < R.NEW_GAMES ? R.K_NEW : R.K;
+          moves.push([row, Math.round(k * (act - exp) * 1000) / 1000, won, exp]);
+        }
+      }
+      for (const [row, change, won, exp] of moves) {   // apply after working out the whole game
+        row.rating = Math.round((row.rating + change) * 1000) / 1000;
+        row.games += 1; if (won) row.won += 1;
+        row.history.push({ date: t.date || '', cup: t.id, slot: m.slot, change, rating: row.rating, expected: exp });
+      }
+    }
+    for (const n of known.keys()) get(n);
+    return [...rows.values()].map((r) => ({ ...r, provisional: r.games < R.NEW_GAMES, change: Math.round((r.rating - r.start) * 1000) / 1000 }))
+      .sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name));
+  };
+
   /** A rough "how long will this take" for the setup screen. */
   PT.estimate = (matches, pointsTo = 15) => {
     const slots = matches.length ? Math.max(...matches.map((m) => m.slot)) : 0;
