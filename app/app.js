@@ -1177,11 +1177,13 @@
     if (state.data.role === 'member') return '';
     return `
       ${PT.finals(t).length ? '<button class="btn block" data-action="t-finals">Round robin done: create the final</button>' : ''}
+      ${t.rated === false ? '<p class="small muted center" style="margin:14px 0 0">⭐ Not counted in the Junk Rating</p>' : ''}
       <details class="t-manage">
         <summary>Manage tournament</summary>
         <div class="btn-row">
           <button class="btn ghost" data-action="t-replace">Replace a player</button>
           <button class="btn ghost" data-action="t-remove">Remove a player</button>
+          <button class="btn ghost" data-action="t-rated">${t.rated === false ? '⭐ Count toward Junk Rating' : "Don't count toward Junk Rating"}</button>
           <button class="btn ghost danger-text" data-action="t-delete">Delete tournament</button>
         </div>
       </details>`;
@@ -1712,7 +1714,7 @@
         if (cur) { t.disabled = true; try { await shareTournament(cur); } finally { t.disabled = false; } }
         return true;
       }
-      case 't-finals': case 't-delete': case 't-replace': case 't-remove': {
+      case 't-finals': case 't-delete': case 't-replace': case 't-remove': case 't-rated': {
         const cur = state.tournaments.find((x) => x.id === state.tview);
         if (!cur) return true;
         const put = async (next, okMsg) => {
@@ -1722,6 +1724,10 @@
         if (a === 't-finals') {
           const finals = PT.finals(cur);
           if (finals.length) await put({ ...cur, matches: [...cur.matches, ...finals] }, 'Final created');
+        } else if (a === 't-rated') {
+          const off = cur.rated !== false;
+          if (!window.confirm(off ? 'Leave this tournament out of the Junk Rating? Its games stop counting for everyone.' : 'Count this tournament in the Junk Rating again?')) return true;
+          await put({ ...cur, rated: !off }, off ? 'Left out of the Junk Rating' : 'Counts toward the Junk Rating again');
         } else if (a === 't-remove') {
           const who = window.prompt(`Who is leaving?\n\n${cur.players.join(', ')}`);
           if (!who) return true;

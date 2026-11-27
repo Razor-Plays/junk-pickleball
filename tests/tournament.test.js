@@ -214,3 +214,12 @@ test('Junk Rating follows the worked examples', () => {
   assert.equal(last.provisional, false);
   assert.ok(Math.abs(last.history[10].change) < Math.abs(last.history[0].change));
 });
+
+test('a tournament switched off is left out of the Junk Rating', () => {
+  const m = { id: 'm1', slot: 1, court: 'A', stage: 'group', a: ['A', 'B'], b: ['C', 'D'], sa: 15, sb: 3 };
+  const starts = { A: 3, B: 3, C: 3, D: 3 };
+  const on = PT.ratings([{ id: 't1', date: '2026-11-26', matches: [m] }], starts);
+  const off = PT.ratings([{ id: 't1', date: '2026-11-26', rated: false, matches: [m] }], starts);
+  assert.ok(on.find((r) => r.name === 'A').rating > 3);
+  assert.deepEqual(off.map((r) => [r.rating, r.games]), [[3, 0], [3, 0], [3, 0], [3, 0]]);
+});
