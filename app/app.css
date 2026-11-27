@@ -814,7 +814,7 @@ details.club-section > summary .grow:has(.jc-title) { align-items: center; }
 /* All Junk Cups: one fold per month */
 .cup-month .list { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
 
-/* Junk Rating (admins) */
+/* JUPR (admins) */
 .r-rank { flex: none; width: 24px; text-align: center; font-weight: 800; color: var(--muted); }
 .r-val { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
 .r-val b { display: block; font-size: 18px; }

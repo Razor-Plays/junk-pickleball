@@ -397,7 +397,7 @@
   };
 
   /**
-   * Junk Rating. Every scored Junk Cup game, oldest first:
+   * JUPR. Every scored Junk Cup game, oldest first:
    *   team rating = average of the two partners
    *   expected share of the points = 1 / (1 + 10^(-(us - them) / SCALE))
    *   each player moves K × (actual share − expected share)
