@@ -993,7 +993,7 @@
     const tournamentBox = junkCupBox(true);
     const ratings = junkRatings().filter((r) => active.some((p) => p.name === r.name) || r.games);
     const rated = ratings.filter((r) => r.games).length;
-    const ratingBox = section('club-rating', 'JUPR', `Junk Pickleball rating · admins only · ${rated} rated`, `
+    const ratingBox = section('club-rating', 'JUPR', rated ? `🔒 ${rated} rated` : '🔒 admins only', `
         <p class="small muted" style="margin:0 2px 8px">From Junk Cup games only. Ratings are provisional for a player's first 10 games. Set someone's starting point in Edit player.</p>
         <div class="list">${ratings.map((r, i) => `
           <button class="row" data-action="open-player" data-name="${esc(r.name)}">
