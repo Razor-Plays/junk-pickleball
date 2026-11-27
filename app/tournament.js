@@ -418,6 +418,7 @@
     const now = (n) => (get(n) ? get(n).rating : R.DEFAULT);
     const games = [];
     for (const t of tournaments || []) {
+      if (t.rated === false) continue;   // switched off by an admin (e.g. a trial night)
       for (const m of t.matches || []) if (PT.isScored(m)) games.push({ t, m });
     }
     games.sort((x, y) => String(x.t.date || '').localeCompare(String(y.t.date || '')) || String(x.t.id).localeCompare(String(y.t.id)) || x.m.slot - y.m.slot || String(x.m.court).localeCompare(String(y.m.court)));
