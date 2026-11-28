@@ -718,7 +718,6 @@
     if (guests.length) out.push('', '*Guests*', ...guests.map((g) => line(g.name, g.amount, g.note)));
 
     const notes = [];
-    if (stmt.members.length) notes.push("Members' fees come off the courts they booked.");
     if (guests.some((g) => g.note)) notes.push('Hosts settle up for their guests.');
     notes.push('Thanks! 🥒🎾');
     out.push('', notes.join(' '));
