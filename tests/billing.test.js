@@ -247,7 +247,7 @@ test('group message: one list of who pays the organiser, guests with their host'
     '• Johann: $110.00',
     "• Milo: $40.00 (Ann's guest)",
     '',
-    "Members' fees come off the courts they booked. Hosts settle up for their guests. Thanks! 🥒🎾",
+    "Hosts settle up for their guests. Thanks! 🥒🎾",
   ].join('\n'));
 });
 
@@ -268,7 +268,7 @@ test('group message: a member who booked less than they played pays the differen
     '• Cat: $140.00',
     '• Dan: $140.00',
     '',
-    "Members' fees come off the courts they booked. Thanks! 🥒🎾",
+    'Thanks! 🥒🎾',
   ].join('\n'));
 });
 
