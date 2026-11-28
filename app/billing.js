@@ -728,6 +728,9 @@
     return out.join('\n');
   };
 
+  // The short caption that goes with the court fees picture; the picture has the amounts.
+  PB.groupCaption = (stmt, settings) => `*${settings.club_name || 'Pickleball'} — ${PB.monthLabel(stmt.month)} court fees*\nThanks! 🥒🎾`;
+
   if (typeof module !== 'undefined' && module.exports) module.exports = PB;
   else root.PB = PB;
 })(typeof window !== 'undefined' ? window : this);
