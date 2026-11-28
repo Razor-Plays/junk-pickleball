@@ -233,12 +233,12 @@ test('a visitor paying their own way is a guest, not someone with a guest', () =
   assert.deepEqual(cat.guests, [{ name: 'Jeremy', amount: 110, count: 2 }]);
 });
 
-test('group message: everyone on their own line, guests with their host, members shown separately', () => {
+test('group message: one list of who pays the organiser, guests with their host', () => {
   const msg = PB.groupMessage(PB.monthStatement(mixed, '2026-12'), mixed.settings);
   assert.equal(msg, [
     '*Junk Pickleball — December 2026 court fees*',
     '',
-    '*Regulars*',
+    '*Please pay Tommy*',
     '• Cat: $110.00',
     '• Dan: $40.00',
     '',
@@ -247,16 +247,29 @@ test('group message: everyone on their own line, guests with their host, members
     '• Johann: $110.00',
     "• Milo: $40.00 (Ann's guest)",
     '',
-    '*Members* (taken off their payback)',
-    '• Ann: $40.00',
-    '• Ben: $70.00',
-    '',
-    'Please pay Tommy — hosts settle up for their guests. Thanks! 🥒🎾',
+    "Members' fees come off the courts they booked. Hosts settle up for their guests. Thanks! 🥒🎾",
   ].join('\n'));
-  // every court dollar that isn't Reclub's appears exactly once
-  const listed = [...msg.matchAll(/\$([\d.]+)/g)].reduce((sum, m) => sum + Number(m[1]), 0);
-  const st = PB.monthStatement(mixed, '2026-12');
-  assert.equal(PB.round2(listed), PB.round2(st.totals.allocated - st.reclub.courtShare));
+});
+
+test('group message: a member who booked less than they played pays the difference; the organiser is never listed', () => {
+  // Ben books every court and collects; Ann booked nothing but played twice at $70.
+  const d = PB.normalize({
+    settings: { default_rate: 140, reclub_fee: 0, pay_to: 'Ben' },
+    players: raw.players,
+    sessions: [{ id: 'y1', date: '2026-12-03', reclub_fee: 0 }, { id: 'y2', date: '2026-12-10', reclub_fee: 0 }],
+    bookings: [{ session_id: 'y1', member: 'Ben', hours: 2, rate: 140 }, { session_id: 'y2', member: 'Ben', hours: 2, rate: 140 }],
+    attendance: ['y1', 'y2'].flatMap((s) => ['Ann', 'Ben', 'Cat', 'Dan'].map((n) => ({ session_id: s, name: n, guest: 'FALSE', pays: n }))),
+  });
+  assert.equal(PB.groupMessage(PB.monthStatement(d, '2026-12'), d.settings), [
+    '*Junk Pickleball — December 2026 court fees*',
+    '',
+    '*Please pay Ben*',
+    '• Ann: $140.00 (fees less courts booked)',
+    '• Cat: $140.00',
+    '• Dan: $140.00',
+    '',
+    "Members' fees come off the courts they booked. Thanks! 🥒🎾",
+  ].join('\n'));
 });
 
 test("a host's bill says what each guest's share is", () => {

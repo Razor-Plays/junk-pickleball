@@ -689,18 +689,23 @@
   };
 
   /**
-   * The monthly summary for the group chat. Everyone is listed with their own
-   * fee; guests get their own line (with their host named) so the host knows
-   * what to collect. Members are shown too, but their fee comes off their
-   * payback. *Stars* make the headings bold in WhatsApp.
+   * The monthly summary for the group chat: what each person sends the
+   * organiser. Regulars, and any member whose fees came to more than the courts
+   * they booked, share one list; guests get their own (with their host named)
+   * so the host knows what to collect. Members who are owed money aren't
+   * listed: that's between the members. *Stars* make the headings bold in WhatsApp.
    */
   PB.groupMessage = (stmt, settings) => {
     const cur = settings.currency || '$';
     const line = (name, amount, note = '') => `• ${name}: ${PB.money(amount, cur)}${note}`;
     const out = [`*${settings.club_name || 'Pickleball'} — ${PB.monthLabel(stmt.month)} court fees*`];
 
-    const regulars = stmt.players.filter((p) => !p.isGuest && p.own > 0);
-    if (regulars.length) out.push('', '*Regulars*', ...regulars.map((p) => line(p.name, p.own)));
+    const toPay = stmt.players.filter((p) => !p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
+    for (const m of stmt.members) {
+      if (m.payback < 0 && m.name !== settings.pay_to) toPay.push({ name: m.name, amount: -m.payback, note: ' (fees less courts booked)' });
+    }
+    toPay.sort((a, b) => a.name.localeCompare(b.name));
+    if (toPay.length) out.push('', `*Please pay ${settings.pay_to || 'the organiser'}*`, ...toPay.map((p) => line(p.name, p.amount, p.note)));
 
     const guests = stmt.players.filter((p) => p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
     for (const host of [...stmt.players, ...stmt.members]) {
@@ -712,11 +717,11 @@
     guests.sort((a, b) => a.name.localeCompare(b.name));
     if (guests.length) out.push('', '*Guests*', ...guests.map((g) => line(g.name, g.amount, g.note)));
 
-    const members = stmt.members.filter((m) => m.own > 0);
-    if (members.length) out.push('', '*Members* (taken off their payback)', ...members.map((m) => line(m.name, m.own)));
-
-    const hosted = guests.some((g) => g.note);
-    out.push('', `Please pay ${settings.pay_to || 'the organiser'}${hosted ? ' — hosts settle up for their guests' : ''}. Thanks! 🥒🎾`);
+    const notes = [];
+    if (stmt.members.length) notes.push("Members' fees come off the courts they booked.");
+    if (guests.some((g) => g.note)) notes.push('Hosts settle up for their guests.');
+    notes.push('Thanks! 🥒🎾');
+    out.push('', notes.join(' '));
     return out.join('\n');
   };
 
