@@ -1202,6 +1202,124 @@
     img.onerror = () => resolve(null);   // the poster still works without a picture
     img.src = src;
   });
+  // The monthly court fees as a scoreboard picture for the group chat.
+  // The board grows taller when there are more names than fit.
+  async function feesPoster(st, settings, inProgress) {
+    const bill = PB.groupBill(st, settings);
+    if (!bill.toPay.length && !bill.guests.length) return null;
+    const cur = settings.currency || '$';
+    const W = 1080, PAD = 64, NAVY_BG = '#0A2236', YELLOW = '#FFC83D', ORANGE = '#FF6729', OCEAN = '#13A5C5', MUTED = '#9FC6D6';
+    // the scoreboard face, with the app's own font as a fallback
+    const board = '"Chakra Petch", ' + (getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif');
+    // the font ships with the app (two small files), so it works offline too
+    if (!feesPoster.fonts) {
+      feesPoster.fonts = Promise.all([600, 700].map((w) => new FontFace('Chakra Petch', `url(chakra-petch-${w}.woff2)`, { weight: String(w) }).load()
+        .then((f) => document.fonts.add(f)).catch(() => {})));
+    }
+    await Promise.race([feesPoster.fonts, new Promise((r) => setTimeout(r, 2500))]);
+    const logo = await loadImage('logo.svg');
+
+    const ROW = 76, NOTE_ROW = 94, GAP = 11;
+    const rowH = (x) => (x.note ? NOTE_ROW : ROW);
+    const headH = 280, footH = 132;
+    let listH = bill.toPay.reduce((h, x) => h + rowH(x) + GAP, 0);
+    if (bill.guests.length) listH += 52 + bill.guests.reduce((h, x) => h + rowH(x) + GAP, 0);
+    const H = Math.max(1440, PAD + headH + 24 + listH + 30 + footH + PAD);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const c = canvas.getContext('2d');
+    const font = (px, weight = 700) => { c.font = `${weight} ${px}px ${board}`; };
+    const round = (x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
+    const spaced = (text, x, y, gap, align = 'left') => {
+      const chars = [...text];
+      const width = chars.reduce((w, ch) => w + c.measureText(ch).width + gap, -gap);
+      let at = align === 'center' ? x - width / 2 : align === 'right' ? x - width : x;
+      c.textAlign = 'left';
+      for (const ch of chars) { c.fillText(ch, at, y); at += c.measureText(ch).width + gap; }
+      return width;
+    };
+    const fitSize = (text, maxW, px, gap) => {
+      let size = px;
+      for (; size > 22; size -= 2) { font(size); if ([...text].reduce((w, ch) => w + c.measureText(ch).width + gap, -gap) <= maxW) break; }
+      return size;
+    };
+
+    // night sky with a soft blue glow from the top
+    c.fillStyle = NAVY_BG; c.fillRect(0, 0, W, H);
+    const glow = c.createRadialGradient(W / 2, -0.1 * H, 0, W / 2, -0.1 * H, Math.hypot(W, H) * 0.55);
+    glow.addColorStop(0, 'rgba(19,165,197,.35)'); glow.addColorStop(1, 'rgba(19,165,197,0)');
+    c.fillStyle = glow; c.fillRect(0, 0, W, H);
+    c.textBaseline = 'alphabetic';
+
+    // header: logo, title, month
+    let y = PAD;
+    const logoW = 300, logoH = logo ? (logoW * logo.height) / logo.width : 0;
+    if (logo) {
+      c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 18; c.shadowOffsetY = 6;
+      c.drawImage(logo, PAD - 6, y + (headH - logoH) / 2, logoW, logoH); c.restore();
+    }
+    const tx = PAD + logoW + 26, tw = W - PAD - tx;
+    c.fillStyle = YELLOW; font(fitSize('COURT FEES', tw, 70, 3));
+    spaced('COURT FEES', tx, y + headH / 2 + 4, 3);
+    const sub = `${PB.monthLabel(st.month)} · ${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'}${inProgress ? ' so far' : ''}`.toUpperCase();
+    c.fillStyle = MUTED; font(fitSize(sub, tw, 30, 3), 600);
+    spaced(sub, tx, y + headH / 2 + 48, 3);
+    y += headH + 24;
+
+    // rows
+    const row = (x, dashed) => {
+      const h = rowH(x), w = W - PAD * 2;
+      round(PAD, y, w, h, 16);
+      c.fillStyle = '#102F49'; c.fill();
+      c.lineWidth = 3; c.strokeStyle = dashed ? '#2C5878' : '#1A4565';
+      if (dashed) c.setLineDash([10, 7]);
+      c.stroke(); c.setLineDash([]);
+      // amount in a dark inset with a yellow glow
+      const amount = PB.money(x.amount, cur);
+      font(50); const aw = c.measureText(amount).width + 34;
+      round(PAD + w - 22 - aw, y + (h - 60) / 2, aw, 60, 10);
+      c.fillStyle = '#061826'; c.fill();
+      c.save(); c.shadowColor = 'rgba(255,200,61,.5)'; c.shadowBlur = 20;
+      c.fillStyle = YELLOW; c.textAlign = 'right'; c.fillText(amount, PAD + w - 22 - 17, y + h / 2 + 18); c.restore();
+      // name (and a small note under it)
+      const nameMax = w - aw - 70;
+      c.fillStyle = '#FFFFFF'; font(fitSize(x.name.toUpperCase(), nameMax, 42, 2));
+      spaced(x.name.toUpperCase(), PAD + 26, y + (x.note ? 44 : h / 2 + 15), 2);
+      if (x.note) { c.fillStyle = MUTED; font(22, 600); spaced(x.note.toUpperCase(), PAD + 26, y + 76, 2); }
+      y += h + GAP;
+    };
+    bill.toPay.forEach((x) => row(x, false));
+    if (bill.guests.length) {
+      c.fillStyle = OCEAN; font(28); spaced('GUESTS', PAD + 4, y + 34, 5);
+      y += 52;
+      bill.guests.forEach((x) => row(x, true));
+    }
+
+    // the orange "pay" banner at the bottom
+    const fy = H - PAD - footH, fw = W - PAD * 2;
+    c.save(); c.shadowColor = 'rgba(255,103,41,.4)'; c.shadowBlur = 34;
+    round(PAD, fy, fw, footH, 20); c.fillStyle = ORANGE; c.fill(); c.restore();
+    const pay = `PAY ${bill.payTo.toUpperCase()}`;
+    c.fillStyle = '#FFFFFF'; font(fitSize(pay, fw - 80, 62, 9));
+    spaced(pay, W / 2, fy + 72, 9, 'center');
+    c.fillStyle = '#FFE6D3'; font(26, 600); spaced('THANK YOU', W / 2, fy + 110, 9, 'center');
+    return canvas;
+  }
+
+  // Send to group: the scoreboard picture with the usual text as its caption.
+  // Phones that can't share pictures get the text on its own, as before.
+  async function shareFees(st, settings, inProgress) {
+    const text = PB.groupMessage(st, settings);
+    if (!navigator.canShare || !navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] })) { sendText(text); return; }
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});   // in case WhatsApp drops the caption
+    const canvas = await feesPoster(st, settings, inProgress);
+    if (!canvas) { sendText(text); return; }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    const file = new File([blob], `court-fees-${st.month}.jpg`, { type: 'image/jpeg' });
+    try { await navigator.share({ files: [file], text }); } catch (e) { /* closed the share sheet */ }
+  }
+
   async function tournamentPoster(t) {
     const podium = PT.podium(t);
     if (!podium.length) return null;
@@ -2128,7 +2246,7 @@
         sendText(text, p && p.phone);
         break;
       }
-      case 'send-group': sendText(PB.groupMessage(PB.monthStatement(d, state.month), d.settings)); break;
+      case 'send-group': shareFees(PB.monthStatement(d, state.month), d.settings, state.month >= todayISO().slice(0, 7)); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'open-player': openPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(t.dataset.member || ''); break;
