@@ -689,6 +689,25 @@
   };
 
   /**
+   * Who pays the organiser this month, for the group message and its picture.
+   * toPay: regulars, plus members whose fees came to more than the courts they
+   * booked (the difference). guests: with a note naming their host.
+   */
+  PB.groupBill = (stmt, settings) => {
+    const toPay = stmt.players.filter((p) => !p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
+    for (const m of stmt.members) {
+      if (m.payback < 0 && m.name !== settings.pay_to) toPay.push({ name: m.name, amount: -m.payback, note: 'fees less courts booked' });
+    }
+    toPay.sort((a, b) => a.name.localeCompare(b.name));
+    const guests = stmt.players.filter((p) => p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
+    for (const host of [...stmt.players, ...stmt.members]) {
+      for (const g of host.guests) guests.push({ name: g.name, amount: g.amount, note: host.name === 'Unassigned' ? 'no payer set' : `${host.name}'s guest` });
+    }
+    guests.sort((a, b) => a.name.localeCompare(b.name));
+    return { payTo: settings.pay_to || 'the organiser', toPay, guests };
+  };
+
+  /**
    * The monthly summary for the group chat: what each person sends the
    * organiser. Regulars, and any member whose fees came to more than the courts
    * they booked, share one list; guests get their own (with their host named)
@@ -697,28 +716,13 @@
    */
   PB.groupMessage = (stmt, settings) => {
     const cur = settings.currency || '$';
-    const line = (name, amount, note = '') => `• ${name}: ${PB.money(amount, cur)}${note}`;
+    const line = (x) => `• ${x.name}: ${PB.money(x.amount, cur)}${x.note ? ` (${x.note})` : ''}`;
     const out = [`*${settings.club_name || 'Pickleball'} — ${PB.monthLabel(stmt.month)} court fees*`];
-
-    const toPay = stmt.players.filter((p) => !p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
-    for (const m of stmt.members) {
-      if (m.payback < 0 && m.name !== settings.pay_to) toPay.push({ name: m.name, amount: -m.payback, note: ' (fees less courts booked)' });
-    }
-    toPay.sort((a, b) => a.name.localeCompare(b.name));
-    if (toPay.length) out.push('', `*Please pay ${settings.pay_to || 'the organiser'}*`, ...toPay.map((p) => line(p.name, p.amount, p.note)));
-
-    const guests = stmt.players.filter((p) => p.isGuest && p.own > 0).map((p) => ({ name: p.name, amount: p.own, note: '' }));
-    for (const host of [...stmt.players, ...stmt.members]) {
-      for (const g of host.guests) {
-        const note = host.name === 'Unassigned' ? ' (no payer set)' : ` (${host.name}'s guest)`;
-        guests.push({ name: g.name, amount: g.amount, note });
-      }
-    }
-    guests.sort((a, b) => a.name.localeCompare(b.name));
-    if (guests.length) out.push('', '*Guests*', ...guests.map((g) => line(g.name, g.amount, g.note)));
-
+    const bill = PB.groupBill(stmt, settings);
+    if (bill.toPay.length) out.push('', `*Please pay ${bill.payTo}*`, ...bill.toPay.map(line));
+    if (bill.guests.length) out.push('', '*Guests*', ...bill.guests.map(line));
     const notes = [];
-    if (guests.some((g) => g.note)) notes.push('Hosts settle up for their guests.');
+    if (bill.guests.some((g) => g.note)) notes.push('Hosts settle up for their guests.');
     notes.push('Thanks! 🥒🎾');
     out.push('', notes.join(' '));
     return out.join('\n');
