@@ -1204,7 +1204,7 @@
   });
   // The monthly court fees as a scoreboard picture for the group chat.
   // The board grows taller when there are more names than fit.
-  async function feesPoster(st, settings, inProgress) {
+  async function feesPoster(st, settings) {
     const bill = PB.groupBill(st, settings);
     if (!bill.toPay.length && !bill.guests.length) return null;
     const cur = settings.currency || '$';
@@ -1262,7 +1262,7 @@
     const tx = PAD + logoW + 26, tw = W - PAD - tx;
     c.fillStyle = YELLOW; font(fitSize('COURT FEES', tw, 70, 3));
     spaced('COURT FEES', tx, y + headH / 2 + 4, 3);
-    const sub = `${PB.monthLabel(st.month)} · ${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'}${inProgress ? ' so far' : ''}`.toUpperCase();
+    const sub = `${PB.monthLabel(st.month)} · ${st.sessions.length} session${st.sessions.length === 1 ? '' : 's'}`.toUpperCase();
     c.fillStyle = MUTED; font(fitSize(sub, tw, 30, 3), 600);
     spaced(sub, tx, y + headH / 2 + 48, 3);
     y += headH + 24;
@@ -1307,17 +1307,16 @@
     return canvas;
   }
 
-  // Send to group: the scoreboard picture with the usual text as its caption.
-  // Phones that can't share pictures get the text on its own, as before.
-  async function shareFees(st, settings, inProgress) {
-    const text = PB.groupMessage(st, settings);
-    if (!navigator.canShare || !navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] })) { sendText(text); return; }
-    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});   // in case WhatsApp drops the caption
-    const canvas = await feesPoster(st, settings, inProgress);
-    if (!canvas) { sendText(text); return; }
+  // Send to group: the scoreboard picture with a short caption. Phones that
+  // can't share pictures get the full text with the amounts instead.
+  async function shareFees(st, settings) {
+    const full = PB.groupMessage(st, settings);
+    if (!navigator.canShare || !navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] })) { sendText(full); return; }
+    const canvas = await feesPoster(st, settings);
+    if (!canvas) { sendText(full); return; }
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
     const file = new File([blob], `court-fees-${st.month}.jpg`, { type: 'image/jpeg' });
-    try { await navigator.share({ files: [file], text }); } catch (e) { /* closed the share sheet */ }
+    try { await navigator.share({ files: [file], text: PB.groupCaption(st, settings) }); } catch (e) { /* closed the share sheet */ }
   }
 
   async function tournamentPoster(t) {
@@ -2246,7 +2245,7 @@
         sendText(text, p && p.phone);
         break;
       }
-      case 'send-group': shareFees(PB.monthStatement(d, state.month), d.settings, state.month >= todayISO().slice(0, 7)); break;
+      case 'send-group': shareFees(PB.monthStatement(d, state.month), d.settings); break;
       case 'edit-player': editPlayer(t.dataset.name); break;
       case 'open-player': openPlayer(t.dataset.name); break;
       case 'add-membership': addMembership(t.dataset.member || ''); break;

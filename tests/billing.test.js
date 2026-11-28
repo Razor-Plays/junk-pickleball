@@ -272,6 +272,10 @@ test('group message: a member who booked less than they played pays the differen
   ].join('\n'));
 });
 
+test('group caption: just the heading and a thanks (the picture has the amounts)', () => {
+  assert.equal(PB.groupCaption(PB.monthStatement(mixed, '2026-12'), mixed.settings), '*Junk Pickleball — December 2026 court fees*\nThanks! 🥒🎾');
+});
+
 test("a host's bill says what each guest's share is", () => {
   const st = PB.monthStatement(mixed, '2026-12');
   const msg = PB.playerMessage(st.players.find((p) => p.name === 'Cat'), '2026-12', mixed.settings);
