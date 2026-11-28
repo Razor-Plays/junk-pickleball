@@ -764,7 +764,7 @@
       ${owingBox}
       ${playersTable}
       ${membersTable}
-      ${st.sessions.length && !ro ? `<button class="btn secondary block" data-action="send-group">${inProgress ? 'Share the running total with the group' : 'Share summary with the group'}</button>` : ''}
+      ${st.sessions.length && !ro ? `<button class="btn secondary block" data-action="send-group">Send the bill to the group</button>` : ''}
       ${!ro && st.players.length ? '<p class="small muted center" style="margin:8px 0 0">Tap a name for their sessions and history. Tap the circle when they\'ve paid.</p>' : ''}
       ${footer}`;
   }
